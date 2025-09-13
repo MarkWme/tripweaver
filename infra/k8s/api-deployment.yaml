@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tripweaver-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tripweaver-api
+  template:
+    metadata:
+      labels:
+        app: tripweaver-api
+    spec:
+      containers:
+        - name: api
+          image: tripweaver-api:local
+          ports:
+            - containerPort: 8000
+          env:
+            - name: INDEX_PATH
+              value: /data/index.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

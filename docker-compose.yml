@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  api:
+    image: tripweaver-api:local
+    build: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+  frontend:
+    image: tripweaver-frontend:local
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API=http://host.docker.internal:8000
+    volumes:
+      - ./data:/app/data:ro

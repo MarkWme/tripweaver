@@ -1,0 +1,16 @@
+city,country,iata,avg_temp_c_feb,has_beach,has_old_town,flight_hours_from_LON
+Valencia,Spain,VLC,17,yes,yes,1.9
+Lisbon,Portugal,LIS,16,yes,yes,2.3
+Malta,Malta,MLA,15,yes,yes,3.0
+Nice,France,NCE,12,yes,yes,2.1
+Barcelona,Spain,BCN,13,yes,yes,2.0
+Alicante,Spain,ALC,16,yes,yes,2.5
+Faro,Portugal,FAO,15,yes,yes,2.9
+Palma de Mallorca,Spain,PMI,14,yes,yes,2.0
+Tunis,Tunisia,TUN,17,yes,yes,2.5
+Marrakesh,Morocco,RAK,20,no,yes,3.5
+Athens,Greece,ATH,13,yes,yes,3.0
+Dubrovnik,Croatia,DBV,10,yes,yes,3.0
+Split,Croatia,SPU,11,yes,yes,3.0
+Sicily,Italy,PMO,13,yes,yes,2.5
+Cagliari,Italy,CAG,12,yes,yes,2.5

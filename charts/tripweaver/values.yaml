@@ -1,0 +1,10 @@
+replicaCount: 1
+
+image:
+  repository: tripweaver-api
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
