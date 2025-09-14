@@ -23,3 +23,4 @@ jobs:
         run: |
           # Ping the server
           jf rt ping
+          jf c show

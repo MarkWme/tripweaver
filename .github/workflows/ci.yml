@@ -97,6 +97,7 @@ jobs:
         run: |
           echo "Testing Artifactory connection (no secrets will be echoed)"
           jf rt ping || true
+          jf c show
 
       - name: Build, tag and push API image with JFrog
         env:
