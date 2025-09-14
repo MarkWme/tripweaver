@@ -1,0 +1,177 @@
+name: CI - Test, Build, SBOM, Sign, Publish
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_API: ${{ secrets.JFROG_REGISTRY }}/tripweaver-api
+  IMAGE_FRONTEND: ${{ secrets.JFROG_REGISTRY }}/tripweaver-frontend
+  IMAGE_SEED: ${{ secrets.JFROG_REGISTRY }}/tripweaver-seedgen
+
+jobs:
+  test:
+    name: Run tests (Python, C#, Frontend sanity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+
+      - name: Run Python tests
+        working-directory: api
+        run: |
+          PYTHONPATH=. pytest -q
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run seedgen tests
+        working-directory: tools/seedgen
+        run: dotnet test --nologo
+
+      - name: Node sanity test
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Run frontend offline sanity
+        working-directory: frontend
+        run: node test/client-sanity.js
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-tests
+          path: api/.pytest_cache || true
+
+  build_and_publish:
+    name: Build images, generate SBOMs, sign and publish to JFrog
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up JFrog CLI (jf)
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: 'latest'
+        env:
+          JF_URL: ${{ secrets.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+
+      - name: Build, tag and push API image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
+        run: |
+          jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_API }}:latest
+          export JFROG_CLI_BUILD_NAME=tripweaver-api
+          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
+
+      - name: Build, tag and push Frontend image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+        run: |
+          jf docker build -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_FRONTEND }}:latest
+          export JFROG_CLI_BUILD_NAME=tripweaver-frontend
+          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
+
+      - name: Build and push seedgen image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_SEED }}:${{ github.sha }}
+        run: |
+          jf docker build -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_SEED }}:latest
+          export JFROG_CLI_BUILD_NAME=tripweaver-seedgen
+          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
+
+      - name: Install Syft (SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM for API image
+        run: syft ${IMAGE_API}:${{ github.sha }} -o json > _sbom/api-sbom.json
+
+      - name: Generate SBOM for Frontend image
+        run: syft ${IMAGE_FRONTEND}:${{ github.sha }} -o json > _sbom/frontend-sbom.json
+
+      - name: Generate SBOM for Seed image
+        run: syft ${IMAGE_SEED}:${{ github.sha }} -o json > _sbom/seed-sbom.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-artifacts
+          path: _sbom
+
+      - name: Configure JFrog CLI
+        env:
+          JFROG_CLI_OFFER_CONFIG: 'false'
+        run: |
+          jfrog rt config --url=${{ secrets.JF_URL }} --access-token=${{ secrets.JF_ACCESS_TOKEN }} --interactive=false
+
+      - name: Upload SBOMs to Artifactory
+        run: |
+          jfrog rt u "_sbom/*" ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/ --flat=true
+        env:
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
+
+      - name: Sign images (optional)
+        if: ${{ secrets.COSIGN_KEY != '' }}
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+        run: |
+          curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_API }}:${{ github.sha }} || true
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
+
+      - name: Publish image metadata (log summary)
+        run: |
+          echo "Built images:"
+          echo " - ${{ env.IMAGE_API }}:${{ github.sha }}"
+          echo " - ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}"
+          echo " - ${{ env.IMAGE_SEED }}:${{ github.sha }}"
+          echo "SBOMs uploaded to Artifactory at ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/"
+        env:
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
+
+      - name: Persist SBOM logs as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-logs
+          path: _sbom
