@@ -90,7 +90,6 @@ jobs:
           echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
           echo "DEBUG: JF_ACCESS_TOKEN set? $( [ -n "$JF_ACCESS_TOKEN" ] && echo yes || echo no )"
           jf -v
-          jf rt config --url="$JF_URL" --access-token="$JF_ACCESS_TOKEN" --interactive=false
           echo "Configured Artifactory server"
 
       - name: Debug JFrog connection
