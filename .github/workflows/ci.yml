@@ -151,7 +151,7 @@ jobs:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
 
       - name: Sign images (optional)
-        if: ${{ secrets.COSIGN_KEY != '' }}
+        if: ${{ secrets.COSIGN_KEY }}
         env:
           COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
         run: |
