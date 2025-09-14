@@ -110,6 +110,12 @@ jobs:
           jf rt build-add-git
           jf rt build-publish
 
+      - name: Xray scan API image
+        run: |
+          mkdir -p xray
+          echo "Scanning API image early"
+          jf docker scan ${{ env.IMAGE_API }}:${{ github.sha }} --format json > xray/api-scan.json || echo '{"scan":"failed"}' > xray/api-scan.json
+
       - name: Build, tag and push Frontend image with JFrog
         env:
           IMAGE_NAME: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
@@ -122,6 +128,12 @@ jobs:
           jf rt build-add-git
           jf rt build-publish
 
+      - name: Xray scan Frontend image
+        run: |
+          mkdir -p xray
+          echo "Scanning Frontend image early"
+          jf docker scan ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} --format json > xray/frontend-scan.json || echo '{"scan":"failed"}' > xray/frontend-scan.json
+
       - name: Build and push seedgen image with JFrog
         env:
           IMAGE_NAME: ${{ env.IMAGE_SEED }}:${{ github.sha }}
@@ -133,6 +145,12 @@ jobs:
           jf rt build-collect-env
           jf rt build-add-git
           jf rt build-publish
+
+      - name: Xray scan Seed image
+        run: |
+          mkdir -p xray
+          echo "Scanning Seed image early"
+          jf docker scan ${{ env.IMAGE_SEED }}:${{ github.sha }} --format json > xray/seed-scan.json || echo '{"scan":"failed"}' > xray/seed-scan.json
 
       - name: Install Syft (SBOM)
         run: |
@@ -188,15 +206,6 @@ jobs:
           name: sbom-logs
           path: _sbom
 
-      - name: Xray scan images
-        run: |
-          mkdir -p xray
-          echo "Scanning API image"
-          jf docker scan ${{ env.IMAGE_API }}:${{ github.sha }} --format json > xray/api-scan.json || echo '{"scan":"failed"}' > xray/api-scan.json
-          echo "Scanning Frontend image"
-          jf docker scan ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} --format json > xray/frontend-scan.json || echo '{"scan":"failed"}' > xray/frontend-scan.json
-          echo "Scanning Seed image"
-          jf docker scan ${{ env.IMAGE_SEED }}:${{ github.sha }} --format json > xray/seed-scan.json || echo '{"scan":"failed"}' > xray/seed-scan.json
 
       - name: Upload Xray scan artifacts
         uses: actions/upload-artifact@v4
