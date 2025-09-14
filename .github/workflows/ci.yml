@@ -80,6 +80,24 @@ jobs:
           JF_URL: ${{ secrets.JF_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
 
+      - name: Configure JFrog CLI
+        env:
+          JFROG_CLI_OFFER_CONFIG: 'false'
+          JF_URL: ${{ vars.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JFROG_CLI_LOG_LEVEL: DEBUG
+        run: |
+          echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
+          echo "DEBUG: JF_ACCESS_TOKEN set? $( [ -n "$JF_ACCESS_TOKEN" ] && echo yes || echo no )"
+          jf -v
+          jf rt config --url="$JF_URL" --access-token="$JF_ACCESS_TOKEN" --interactive=false
+          echo "Configured Artifactory server"
+
+      - name: Debug JFrog connection
+        run: |
+          echo "Testing Artifactory connection (no secrets will be echoed)"
+          jf rt ping || true
+
       - name: Build, tag and push API image with JFrog
         env:
           IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
@@ -137,12 +155,6 @@ jobs:
         with:
           name: sbom-artifacts
           path: _sbom
-
-      - name: Configure JFrog CLI
-        env:
-          JFROG_CLI_OFFER_CONFIG: 'false'
-        run: |
-          jfrog rt config --url=${{ secrets.JF_URL }} --access-token=${{ secrets.JF_ACCESS_TOKEN }} --interactive=false
 
       - name: Upload SBOMs to Artifactory
         run: |
