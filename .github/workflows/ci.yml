@@ -88,7 +88,6 @@ jobs:
           JFROG_CLI_LOG_LEVEL: DEBUG
         run: |
           echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
-          echo $JF_URL
           echo "DEBUG: JF_ACCESS_TOKEN set? $( [ -n "$JF_ACCESS_TOKEN" ] && echo yes || echo no )"
           jf -v
           echo "Configured Artifactory server"
@@ -139,6 +138,9 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
+      - name: Prepare SBOM directory
+        run: mkdir -p _sbom
+
       - name: Generate SBOM for API image
         run: syft ${IMAGE_API}:${{ github.sha }} -o json > _sbom/api-sbom.json
 
@@ -185,3 +187,25 @@ jobs:
         with:
           name: sbom-logs
           path: _sbom
+
+      - name: Xray scan images
+        run: |
+          mkdir -p xray
+          echo "Scanning API image"
+          jf docker scan ${{ env.IMAGE_API }}:${{ github.sha }} --format json > xray/api-scan.json || echo '{"scan":"failed"}' > xray/api-scan.json
+          echo "Scanning Frontend image"
+          jf docker scan ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} --format json > xray/frontend-scan.json || echo '{"scan":"failed"}' > xray/frontend-scan.json
+          echo "Scanning Seed image"
+          jf docker scan ${{ env.IMAGE_SEED }}:${{ github.sha }} --format json > xray/seed-scan.json || echo '{"scan":"failed"}' > xray/seed-scan.json
+
+      - name: Upload Xray scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-scans
+          path: xray
+
+      - name: Upload Xray scans to Artifactory
+        run: |
+          jfrog rt u "xray/*.json" ${JFROG_REPO:-tripweaver-scans}/$GITHUB_SHA/ --flat=true || true
+        env:
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
