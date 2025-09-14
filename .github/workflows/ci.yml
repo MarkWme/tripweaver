@@ -88,6 +88,7 @@ jobs:
           JFROG_CLI_LOG_LEVEL: DEBUG
         run: |
           echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
+          echo $JF_URL
           echo "DEBUG: JF_ACCESS_TOKEN set? $( [ -n "$JF_ACCESS_TOKEN" ] && echo yes || echo no )"
           jf -v
           echo "Configured Artifactory server"
