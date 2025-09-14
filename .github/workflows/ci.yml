@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 env:
-  IMAGE_API: ${{ secrets.JFROG_REGISTRY }}/tripweaver-api
-  IMAGE_FRONTEND: ${{ secrets.JFROG_REGISTRY }}/tripweaver-frontend
-  IMAGE_SEED: ${{ secrets.JFROG_REGISTRY }}/tripweaver-seedgen
+  IMAGE_API: ${{ env.JFROG_REGISTRY }}/tripweaver-api
+  IMAGE_FRONTEND: ${{ env.JFROG_REGISTRY }}/tripweaver-frontend
+  IMAGE_SEED: ${{ env.JFROG_REGISTRY }}/tripweaver-seedgen
 
 jobs:
   test:
@@ -81,22 +81,12 @@ jobs:
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
 
       - name: Build, tag and push API image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
         run: |
-          REGISTRY=$(echo '${{ secrets.JF_URL }}' | sed -E 's#^https?://##' | cut -d'/' -f1)
-          if [ -z "$REGISTRY" ]; then
-            REGISTRY='${{ secrets.JFROG_REGISTRY }}'
-          fi
-          if [ -z "$REGISTRY" ]; then
-            echo "Error: JFrog registry not set. Please set JF_URL or JFROG_REGISTRY secret." >&2
-            exit 1
-          fi
-          REPO=${{ secrets.JFROG_REPO:-docker-local }}
-          IMAGE_NAME="${REGISTRY}/${REPO}/tripweaver-api:${GITHUB_SHA}"
-          LATEST_NAME="${REGISTRY}/${REPO}/tripweaver-api:latest"
-          echo "Building ${IMAGE_NAME}"
-          jf docker build -t "${IMAGE_NAME}" -t "${LATEST_NAME}" -f ./api/Dockerfile ./api
-          jf docker push "${IMAGE_NAME}"
-          jf docker push "${LATEST_NAME}"
+          jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_API }}:latest
           export JFROG_CLI_BUILD_NAME=tripweaver-api
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -104,22 +94,12 @@ jobs:
           jf rt build-publish
 
       - name: Build, tag and push Frontend image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
         run: |
-          REGISTRY=$(echo '${{ secrets.JF_URL }}' | sed -E 's#^https?://##' | cut -d'/' -f1)
-          if [ -z "$REGISTRY" ]; then
-            REGISTRY='${{ secrets.JFROG_REGISTRY }}'
-          fi
-          if [ -z "$REGISTRY" ]; then
-            echo "Error: JFrog registry not set. Please set JF_URL or JFROG_REGISTRY secret." >&2
-            exit 1
-          fi
-          REPO=${{ secrets.JFROG_REPO:-docker-local }}
-          IMAGE_NAME="${REGISTRY}/${REPO}/tripweaver-frontend:${GITHUB_SHA}"
-          LATEST_NAME="${REGISTRY}/${REPO}/tripweaver-frontend:latest"
-          echo "Building ${IMAGE_NAME}"
-          jf docker build -t "${IMAGE_NAME}" -t "${LATEST_NAME}" -f ./frontend/Dockerfile ./frontend
-          jf docker push "${IMAGE_NAME}"
-          jf docker push "${LATEST_NAME}"
+          jf docker build -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_FRONTEND }}:latest
           export JFROG_CLI_BUILD_NAME=tripweaver-frontend
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -127,22 +107,12 @@ jobs:
           jf rt build-publish
 
       - name: Build and push seedgen image with JFrog
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_SEED }}:${{ github.sha }}
         run: |
-          REGISTRY=$(echo '${{ secrets.JF_URL }}' | sed -E 's#^https?://##' | cut -d'/' -f1)
-          if [ -z "$REGISTRY" ]; then
-            REGISTRY='${{ secrets.JFROG_REGISTRY }}'
-          fi
-          if [ -z "$REGISTRY" ]; then
-            echo "Error: JFrog registry not set. Please set JF_URL or JFROG_REGISTRY secret." >&2
-            exit 1
-          fi
-          REPO=${{ secrets.JFROG_REPO:-docker-local }}
-          IMAGE_NAME="${REGISTRY}/${REPO}/tripweaver-seedgen:${GITHUB_SHA}"
-          LATEST_NAME="${REGISTRY}/${REPO}/tripweaver-seedgen:latest"
-          echo "Building ${IMAGE_NAME}"
-          jf docker build -t "${IMAGE_NAME}" -t "${LATEST_NAME}" -f ./tools/seedgen/Dockerfile ./tools/seedgen
-          jf docker push "${IMAGE_NAME}"
-          jf docker push "${LATEST_NAME}"
+          jf docker build -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
+          jf docker push $IMAGE_NAME
+          jf docker push ${{ env.IMAGE_SEED }}:latest
           export JFROG_CLI_BUILD_NAME=tripweaver-seedgen
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -181,16 +151,14 @@ jobs:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
 
       - name: Sign images (optional)
+        if: ${{ secrets.COSIGN_KEY != '' }}
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
         run: |
-          if [ -n "${{ secrets.COSIGN_KEY }}" ]; then
-            echo "COSIGN_KEY present; attempting to sign images"
-            curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
-            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_API }}:${{ github.sha }} || true
-            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
-            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
-          else
-            echo "COSIGN_KEY is not set; skipping image signing"
-          fi
+          curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_API }}:${{ github.sha }} || true
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
+          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
 
       - name: Publish image metadata (log summary)
         run: |
