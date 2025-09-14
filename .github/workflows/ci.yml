@@ -151,14 +151,16 @@ jobs:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
 
       - name: Sign images (optional)
-        if: ${{ secrets.COSIGN_KEY }}
-        env:
-          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
         run: |
-          curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
-          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_API }}:${{ github.sha }} || true
-          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
-          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
+          if [ -n "${{ secrets.COSIGN_KEY }}" ]; then
+            echo "COSIGN_KEY present; attempting to sign images"
+            curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
+            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_API }}:${{ github.sha }} || true
+            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
+            /usr/local/bin/cosign sign --key "${{ secrets.COSIGN_KEY }}" ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
+          else
+            echo "COSIGN_KEY is not set; skipping image signing"
+          fi
 
       - name: Publish image metadata (log summary)
         run: |
