@@ -1,34 +1,20 @@
 FROM python:3.11-slim AS base
-ARG ARTIFACTORY_PY_INDEX
-ARG ARTIFACTORY_PY_EXTRA
-ARG ARTIFACTORY_USER
-ARG ARTIFACTORY_TOKEN
 WORKDIR /app
+# Copy dependency metadata first
 COPY requirements.txt ./
-# Conditional install using Artifactory indices without writing a pip.conf (reduces syntax edge cases)
-RUN set -euxo pipefail; \
+# Copy in wheelhouse (if supplied by build context) and install offline first
+COPY wheelhouse /tmp/wheelhouse 2>/dev/null || true
+RUN set -eux; \
 	echo "Python version: $(python --version)"; \
 	echo "Pip version: $(pip --version)"; \
-	echo "Requirements contents:"; cat requirements.txt; \
-	if [ -n "${ARTIFACTORY_PY_INDEX}" ]; then \
-		BASE_INDEX="${ARTIFACTORY_PY_INDEX}"; \
-		if [ -n "${ARTIFACTORY_USER}" ] && [ -n "${ARTIFACTORY_TOKEN}" ] && echo "$BASE_INDEX" | grep -q '://'; then \
-			SCHEME=$(echo "$BASE_INDEX" | sed -E 's#^(https?)://.*#\1#'); \
-			HOST_PATH=$(echo "$BASE_INDEX" | sed -E 's#^https?://##'); \
-			AUTH_INDEX="${SCHEME}://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${HOST_PATH}"; \
-			echo "Using authenticated Artifactory index"; \
-			BASE_INDEX="$AUTH_INDEX"; \
-		else \
-			echo "Using Artifactory index without embedded creds (creds missing or already embedded)"; \
-		fi; \
-		if [ -n "${ARTIFACTORY_PY_EXTRA}" ]; then \
-			PIP_INDEX_URL="$BASE_INDEX" PIP_EXTRA_INDEX_URL="${ARTIFACTORY_PY_EXTRA}" pip install -vv --no-cache-dir -r requirements.txt; \
-		else \
-			PIP_INDEX_URL="$BASE_INDEX" pip install -vv --no-cache-dir -r requirements.txt; \
-		fi; \
+	echo "Installing dependencies"; \
+	if [ -d /tmp/wheelhouse ] && ls /tmp/wheelhouse/*.whl >/dev/null 2>&1; then \
+		echo "Found pre-downloaded wheels, installing offline"; \
+		pip install --no-cache-dir --no-index --find-links /tmp/wheelhouse -r requirements.txt; \
 	else \
-		echo "No ARTIFACTORY_PY_INDEX provided, using default PyPI"; \
-		pip install -vv --no-cache-dir -r requirements.txt; \
-	fi
+		echo "No wheelhouse provided; falling back to default index"; \
+		pip install --no-cache-dir -r requirements.txt; \
+	fi; \
+	rm -rf /tmp/wheelhouse || true
 COPY . /app
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]

@@ -72,42 +72,49 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set up JFrog CLI (jf)
+      - name: Set up JFrog CLI (jf) via OIDC
         uses: jfrog/setup-jfrog-cli@v4
         with:
           version: 'latest'
+          oidc-provider-name: MarkWme/tripweaver@github
         env:
           JF_URL: ${{ vars.JF_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
 
-      - name: Configure JFrog CLI
+      - name: Configure JFrog CLI (debug)
         env:
           JFROG_CLI_OFFER_CONFIG: 'false'
           JF_URL: ${{ vars.JF_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
           JFROG_CLI_LOG_LEVEL: DEBUG
         run: |
           echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
-          echo "DEBUG: JF_ACCESS_TOKEN set? $( [ -n "$JF_ACCESS_TOKEN" ] && echo yes || echo no )"
           jf -v
-          echo "Configured Artifactory server"
+          echo "OIDC authenticated Artifactory server"
 
       - name: Debug JFrog connection
         run: |
-          echo "Testing Artifactory connection (no secrets will be echoed)"
+          echo "Testing Artifactory connection (OIDC)"
           jf rt ping || true
           jf c show
 
-      - name: Build, tag and push API image with JFrog
+      - name: Prepare Python dependencies (wheelhouse via Artifactory)
+        working-directory: api
+        env:
+          JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }}
+        run: |
+          # JF_PYPI_REPO should be the Artifactory repo key (e.g. 'pypi-virtual')
+          # OIDC auth already established; jf will use that to access the repo.
+          mkdir -p wheelhouse
+          # Configure pip to use Artifactory repo (virtual or remote) via jf
+          jf pip-config --repo $JF_PYPI_REPO --server-id-default=default || true
+          # Download wheels (no install) so Docker build can be offline
+          jf pip download -r requirements.txt --dest wheelhouse
+          ls -1 wheelhouse
+
+    - name: Build, tag and push API image with JFrog
         env:
           IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
         run: |
-          jf docker build \
-            --build-arg ARTIFACTORY_PY_INDEX=${{ vars.ARTIFACTORY_PY_INDEX }} \
-            --build-arg ARTIFACTORY_PY_EXTRA=${{ vars.ARTIFACTORY_PY_EXTRA }} \
-            --build-arg ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }} \
-            --build-arg ARTIFACTORY_TOKEN=${{ secrets.ARTIFACTORY_TOKEN }} \
-            -t $IMAGE_NAME -f ./api/Dockerfile ./api
+      jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
           jf docker push $IMAGE_NAME
           API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "API image digest: $API_DIGEST"

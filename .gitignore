@@ -18,5 +18,8 @@ obj/
 # SBOM
 _sbom/
 
+# Python vendored wheels
+wheelhouse/
+
 # VS Code
 .vscode/
