@@ -105,6 +105,8 @@ jobs:
           jf docker build \
             --build-arg ARTIFACTORY_PY_INDEX=${{ vars.ARTIFACTORY_PY_INDEX }} \
             --build-arg ARTIFACTORY_PY_EXTRA=${{ vars.ARTIFACTORY_PY_EXTRA }} \
+            --build-arg ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_USER }} \
+            --build-arg ARTIFACTORY_TOKEN=${{ secrets.ARTIFACTORY_TOKEN }} \
             -t $IMAGE_NAME -f ./api/Dockerfile ./api
           jf docker push $IMAGE_NAME
           API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
