@@ -102,7 +102,10 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
         run: |
-          jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
+          jf docker build \
+            --build-arg ARTIFACTORY_PY_INDEX=${{ vars.ARTIFACTORY_PY_INDEX }} \
+            --build-arg ARTIFACTORY_PY_EXTRA=${{ vars.ARTIFACTORY_PY_EXTRA }} \
+            -t $IMAGE_NAME -f ./api/Dockerfile ./api
           jf docker push $IMAGE_NAME
           API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "API image digest: $API_DIGEST"
@@ -123,7 +126,10 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
         run: |
-          jf docker build -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
+          jf docker build \
+            --build-arg ARTIFACTORY_NPM_REGISTRY=${{ vars.ARTIFACTORY_NPM_REGISTRY }} \
+            --build-arg ARTIFACTORY_NPM_AUTH_TOKEN=${{ secrets.ARTIFACTORY_NPM_AUTH_TOKEN }} \
+            -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
           jf docker push $IMAGE_NAME
           FRONTEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "Frontend image digest: $FRONTEND_DIGEST"
@@ -144,7 +150,11 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_SEED }}:${{ github.sha }}
         run: |
-          jf docker build -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
+          jf docker build \
+            --build-arg ARTIFACTORY_NUGET_SOURCE=${{ vars.ARTIFACTORY_NUGET_SOURCE }} \
+            --build-arg ARTIFACTORY_NUGET_USERNAME=${{ secrets.ARTIFACTORY_NUGET_USERNAME }} \
+            --build-arg ARTIFACTORY_NUGET_PASSWORD=${{ secrets.ARTIFACTORY_NUGET_PASSWORD }} \
+            -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
           jf docker push $IMAGE_NAME
           SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "Seed image digest: $SEED_DIGEST"
