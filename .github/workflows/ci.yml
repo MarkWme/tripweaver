@@ -105,7 +105,7 @@ jobs:
           # OIDC auth already established; jf will use that to access the repo.
           mkdir -p wheelhouse
           # Configure pip to use Artifactory repo (virtual or remote) via jf
-          jf pip-config --repo $JF_PYPI_REPO --server-id-default=default || true
+          jf pip-config --repo-resolve $JF_PYPI_REPO --server-id-default=default || true
           # Download wheels (no install) so Docker build can be offline
           jf pip download -r requirements.txt --dest wheelhouse
           ls -1 wheelhouse
