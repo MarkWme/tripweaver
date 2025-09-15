@@ -110,11 +110,11 @@ jobs:
           jf pip download -r requirements.txt --dest wheelhouse
           ls -1 wheelhouse
 
-    - name: Build, tag and push API image with JFrog
+      - name: Build, tag and push API image with JFrog
         env:
           IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
         run: |
-      jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
+          jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
           jf docker push $IMAGE_NAME
           API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "API image digest: $API_DIGEST"
