@@ -104,6 +104,9 @@ jobs:
         run: |
           jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
           jf docker push $IMAGE_NAME
+          API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
+          echo "API image digest: $API_DIGEST"
+          echo "API_DIGEST=$API_DIGEST" >> $GITHUB_ENV
           export JFROG_CLI_BUILD_NAME=tripweaver-api
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -122,6 +125,9 @@ jobs:
         run: |
           jf docker build -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
           jf docker push $IMAGE_NAME
+          FRONTEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
+          echo "Frontend image digest: $FRONTEND_DIGEST"
+          echo "FRONTEND_DIGEST=$FRONTEND_DIGEST" >> $GITHUB_ENV
           export JFROG_CLI_BUILD_NAME=tripweaver-frontend
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -140,6 +146,9 @@ jobs:
         run: |
           jf docker build -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
           jf docker push $IMAGE_NAME
+          SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
+          echo "Seed image digest: $SEED_DIGEST"
+          echo "SEED_DIGEST=$SEED_DIGEST" >> $GITHUB_ENV
           export JFROG_CLI_BUILD_NAME=tripweaver-seedgen
           export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
@@ -159,14 +168,24 @@ jobs:
       - name: Prepare SBOM directory
         run: mkdir -p _sbom
 
-      - name: Generate SBOM for API image
-        run: syft ${IMAGE_API}:${{ github.sha }} -o json > _sbom/api-sbom.json
-
-      - name: Generate SBOM for Frontend image
-        run: syft ${IMAGE_FRONTEND}:${{ github.sha }} -o json > _sbom/frontend-sbom.json
-
-      - name: Generate SBOM for Seed image
-        run: syft ${IMAGE_SEED}:${{ github.sha }} -o json > _sbom/seed-sbom.json
+      - name: Generate SBOMs (API)
+        run: |
+          mkdir -p _sbom/api
+          syft ${IMAGE_API}@${API_DIGEST} -o json > _sbom/api/syft.json
+          syft ${IMAGE_API}@${API_DIGEST} -o spdx-json > _sbom/api/spdx.json
+          syft ${IMAGE_API}@${API_DIGEST} -o cyclonedx-json > _sbom/api/cyclonedx.json
+      - name: Generate SBOMs (Frontend)
+        run: |
+          mkdir -p _sbom/frontend
+          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o json > _sbom/frontend/syft.json
+          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o spdx-json > _sbom/frontend/spdx.json
+          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o cyclonedx-json > _sbom/frontend/cyclonedx.json
+      - name: Generate SBOMs (Seed)
+        run: |
+          mkdir -p _sbom/seed
+          syft ${IMAGE_SEED}@${SEED_DIGEST} -o json > _sbom/seed/syft.json
+          syft ${IMAGE_SEED}@${SEED_DIGEST} -o spdx-json > _sbom/seed/spdx.json
+          syft ${IMAGE_SEED}@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed/cyclonedx.json
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
@@ -176,9 +195,30 @@ jobs:
 
       - name: Upload SBOMs to Artifactory
         run: |
-          jfrog rt u "_sbom/*" ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/ --flat=true
+          jfrog rt u "_sbom/**/*" ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/ --recursive=true --flat=false
         env:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
+
+      - name: Attach SBOMs to build-info (API)
+        run: |
+          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/syft.json
+          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/spdx.json
+          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/cyclonedx.json
+          jf rt build-publish
+
+      - name: Attach SBOMs to build-info (Frontend)
+        run: |
+          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/syft.json
+          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/spdx.json
+          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/cyclonedx.json
+          jf rt build-publish
+
+      - name: Attach SBOMs to build-info (Seed)
+        run: |
+          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/syft.json
+          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/spdx.json
+          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/cyclonedx.json
+          jf rt build-publish
 
       # - name: Sign images (optional)
       #        if: ${{ secrets.COSIGN_KEY != '' }}
@@ -196,7 +236,11 @@ jobs:
           echo " - ${{ env.IMAGE_API }}:${{ github.sha }}"
           echo " - ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}"
           echo " - ${{ env.IMAGE_SEED }}:${{ github.sha }}"
-          echo "SBOMs uploaded to Artifactory at ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/"
+          echo "SBOMs (syft, SPDX, CycloneDX) stored under commit path: ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/(api|frontend|seed)/"
+          echo "Digests:"
+          echo "  API: ${API_DIGEST}"
+          echo "  Frontend: ${FRONTEND_DIGEST}"
+          echo "  Seed: ${SEED_DIGEST}"
         env:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
 
