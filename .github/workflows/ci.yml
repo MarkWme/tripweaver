@@ -63,6 +63,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -79,12 +80,13 @@ jobs:
           oidc-provider-name: MarkWme/tripweaver@github
         env:
           JF_URL: ${{ vars.JF_URL }}
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure JFrog CLI (debug)
         env:
           JFROG_CLI_OFFER_CONFIG: 'false'
           JF_URL: ${{ vars.JF_URL }}
-          JFROG_CLI_LOG_LEVEL: DEBUG
+          # JFROG_CLI_LOG_LEVEL: DEBUG
         run: |
           echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
           jf -v
@@ -119,8 +121,6 @@ jobs:
           API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "API image digest: $API_DIGEST"
           echo "API_DIGEST=$API_DIGEST" >> $GITHUB_ENV
-          export JFROG_CLI_BUILD_NAME=tripweaver-api
-          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
           jf rt build-add-git
           jf rt build-publish
