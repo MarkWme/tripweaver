@@ -218,27 +218,6 @@ jobs:
         env:
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
 
-      - name: Attach SBOMs to build-info (API)
-        run: |
-          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/syft.json
-          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/spdx.json
-          jf rt build-append tripweaver-api ${{ github.run_number }} _sbom/api/cyclonedx.json
-          jf rt build-publish
-
-      - name: Attach SBOMs to build-info (Frontend)
-        run: |
-          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/syft.json
-          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/spdx.json
-          jf rt build-append tripweaver-frontend ${{ github.run_number }} _sbom/frontend/cyclonedx.json
-          jf rt build-publish
-
-      - name: Attach SBOMs to build-info (Seed)
-        run: |
-          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/syft.json
-          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/spdx.json
-          jf rt build-append tripweaver-seedgen ${{ github.run_number }} _sbom/seed/cyclonedx.json
-          jf rt build-publish
-
       # - name: Sign images (optional)
       #        if: ${{ secrets.COSIGN_KEY != '' }}
       #        env:
