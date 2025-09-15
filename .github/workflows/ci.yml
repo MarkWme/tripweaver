@@ -57,7 +57,7 @@ jobs:
           path: api/.pytest_cache || true
 
   build_and_publish:
-    name: Build images, generate SBOMs, sign and publish to JFrog
+    name: Build and Publish TripWeaver components
     runs-on: ubuntu-latest
     needs: test
     permissions:
@@ -143,8 +143,6 @@ jobs:
           FRONTEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "Frontend image digest: $FRONTEND_DIGEST"
           echo "FRONTEND_DIGEST=$FRONTEND_DIGEST" >> $GITHUB_ENV
-          export JFROG_CLI_BUILD_NAME=tripweaver-frontend
-          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
           jf rt build-add-git
           jf rt build-publish
@@ -168,8 +166,6 @@ jobs:
           SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
           echo "Seed image digest: $SEED_DIGEST"
           echo "SEED_DIGEST=$SEED_DIGEST" >> $GITHUB_ENV
-          export JFROG_CLI_BUILD_NAME=tripweaver-seedgen
-          export JFROG_CLI_BUILD_NUMBER=${{ github.run_number }}
           jf rt build-collect-env
           jf rt build-add-git
           jf rt build-publish
