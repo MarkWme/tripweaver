@@ -3,7 +3,7 @@ WORKDIR /app
 # Copy dependency metadata first
 COPY requirements.txt ./
 # Copy in wheelhouse (if supplied by build context) and install offline first
-COPY wheelhouse /tmp/wheelhouse 2>/dev/null || true
+COPY wheelhouse /tmp/wheelhouse
 RUN set -eux; \
 	echo "Python version: $(python --version)"; \
 	echo "Pip version: $(pip --version)"; \
