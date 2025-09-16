@@ -4,5 +4,5 @@ pydantic==1.10.12
 python-multipart==0.0.6
 pytest==7.4.2
 
-# Intentional vulnerable dependency for Xray test (Jinja2 2.10 - CVE-2019-10906)
-jinja2==2.10
+# Intentional vulnerable dependency for Xray test (requests 2.20.0 - CVE-2018-18074)
+requests==2.20.0
