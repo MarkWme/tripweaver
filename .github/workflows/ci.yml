@@ -67,7 +67,7 @@ jobs:
         env:
           ARTIFACTORY_NPM_REGISTRY: ${{ vars.ARTIFACTORY_NPM_REGISTRY }} # https://<org>.jfrog.io/artifactory/api/npm/npm/
         run: |
-          jf npm-config --global=true --server-id-resolve setup-jfrog-cli-server --repo-resolve "$ARTIFACTORY_NPM_REGISTRY" || true
+          jf npm-config --global=true --repo-resolve "$ARTIFACTORY_NPM_REGISTRY" || true
           jf npm ci --module fe-npm
           rm -rf node_modules  # keep image slim; we only needed lockfile validation
 
