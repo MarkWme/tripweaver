@@ -1,4 +1,4 @@
-name: CI - Test, Build, SBOM, Sign, Publish
+name: CI - TripWeaver - Test, Build, SBOM, Sign and Publish
 
 on:
   push:
