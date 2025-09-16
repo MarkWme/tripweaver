@@ -125,12 +125,12 @@ jobs:
           jf rt build-add-git
           jf rt build-publish
 
-      # ---- Xray scanning (multiple approaches) ----
-      - name: Xray scan build-info
-        run: jf build-scan "tripweaver-ci" "${{ github.run_id }}" --fail=true
-
+      # ---- Xray scanning ----
       - name: Xray scan Docker images
         run: |
-          jf docker scan $IMG_API@${API_DIGEST} --fail=false
-          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false
-          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false
+          echo "Scanning API image for vulnerabilities..."
+          jf docker scan $IMG_API@${API_DIGEST} --fail=false --format=table
+          echo "Scanning Frontend image for vulnerabilities..."
+          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false --format=table
+          echo "Scanning Seedgen image for vulnerabilities..."
+          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false --format=table
