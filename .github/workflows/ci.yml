@@ -5,8 +5,6 @@ on:
   pull_request:
 
 env:
-  JFROG_CLI_BUILD_NAME: tripweaver
-  JFROG_CLI_BUILD_NUMBER: ${{ github.run_id }}
   REGISTRY: ${{ vars.JFROG_REGISTRY }}         # e.g. <org>.jfrog.io
   IMG_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
   IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
@@ -31,7 +29,7 @@ jobs:
           JF_URL: ${{ vars.JF_URL }}
 
       - run: |
-          echo "Build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
+          echo "JFrog CLI configured and ready"
           jf -v
           jf rt ping
 
@@ -109,7 +107,7 @@ jobs:
           syft $IMG_API@${API_DIGEST}   -o cyclonedx-json > _sbom/api.cdx.json
           syft $IMG_FE@${FE_DIGEST}     -o cyclonedx-json > _sbom/frontend.cdx.json
           syft $IMG_SEED@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed.cdx.json
-          jf rt u "_sbom/*.json" "generic-local/sbom/$JFROG_CLI_BUILD_NAME/$JFROG_CLI_BUILD_NUMBER/"
+          jf rt u "_sbom/*.json" "generic-local/sbom/tripweaver-ci/${{ github.run_id }}/"
 
       # ---- Sign images (Cosign keyless). Optional: set COSIGN_EXPERIMENTAL=1 if needed ----
       - uses: sigstore/cosign-installer@v3.7.0
