@@ -125,4 +125,4 @@ jobs:
           jf rt build-add-git
           jf rt build-publish
       - name: Xray scan (build gate)
-        run: jf xr scan --fail=true
+        run: jf scan --build-name="tripweaver-ci" --build-number="${{ github.run_id }}" --fail=true
