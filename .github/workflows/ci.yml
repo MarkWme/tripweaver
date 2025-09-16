@@ -125,46 +125,9 @@ jobs:
           jf rt build-add-git
           jf rt build-publish
 
-      # ---- Create Xray Watch for build indexing ----
-      - name: Create/Update Xray Watch for builds
-        run: |
-          cat > watch-config.json << 'EOF'
-          {
-            "general_data": {
-              "name": "tripweaver-builds",
-              "description": "Watch for TripWeaver CI builds",
-              "active": true
-            },
-            "project_resources": {
-              "resources": [
-                {
-                  "type": "build",
-                  "name": "tripweaver-ci"
-                }
-              ]
-            },
-            "assigned_policies": [
-              {
-                "name": "default-policy",
-                "type": "security"
-              }
-            ]
-          }
-          EOF
-
-          # Try to create the watch (will fail if exists, that's OK)
-          jf xr curl -X POST "/api/v2/watches" \
-            -H "Content-Type: application/json" \
-            -d @watch-config.json || echo "Watch may already exist, continuing..."
-
-          rm -f watch-config.json
-
-      # ---- Xray scanning ----
-      - name: Xray scan build-info (now that watch is created)
-        run: |
-          echo "Waiting a moment for watch to be processed..."
-          sleep 10
-          jf build-scan "tripweaver-ci" "${{ github.run_id }}" --fail=false
+      # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
+      - name: Xray scan build-info
+        run: jf build-scan "tripweaver-ci" "${{ github.run_id }}" --fail=false
 
       - name: Xray scan Docker images
         run: |
