@@ -15,16 +15,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: { id-token: write, contents: read }
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       # ---- JFrog CLI (OIDC) ----
-      - uses: jfrog/setup-jfrog-cli@v4
+      - id: jf-setup
+        uses: jfrog/setup-jfrog-cli@v4
         with:
           version: latest
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
-        env: { JF_URL: ${{ vars.JF_URL }} }
+        env:
+          JF_URL: ${{ vars.JF_URL }}
 
       - run: |
           echo "Build: $BUILD_NAME #$BUILD_NUMBER"
