@@ -39,7 +39,8 @@ jobs:
       # Python (pip → module api-pip)
       - name: Pip resolve via Artifactory
         working-directory: api
-        env: { JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }} }   # virtual (e.g. pypi)
+        env:
+          JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }}   # virtual (e.g. pypi)
         run: |
           mkdir -p wheelhouse
           jf pip-config --repo-resolve "$JF_PYPI_REPO" || true
@@ -59,7 +60,8 @@ jobs:
       # NuGet (.NET → module seed-nuget)
       - name: NuGet resolve via Artifactory
         working-directory: tools/seedgen
-        env: { ARTIFACTORY_NUGET_SOURCE: ${{ vars.ARTIFACTORY_NUGET_SOURCE }} } # https://<org>.jfrog.io/artifactory/api/nuget/nuget
+        env: 
+          ARTIFACTORY_NUGET_SOURCE: ${{ vars.ARTIFACTORY_NUGET_SOURCE }} # https://<org>.jfrog.io/artifactory/api/nuget/nuget
         run: |
           jf dotnet-config --repo-resolve "$ARTIFACTORY_NUGET_SOURCE" || true
           jf dotnet restore --module seed-nuget --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
