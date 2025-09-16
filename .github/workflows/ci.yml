@@ -128,24 +128,18 @@ jobs:
       # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
       - name: Xray scan build-info
         run: |
-          # Get the actual build number from the JFrog CLI environment
-          BUILD_NUMBER="${JFROG_CLI_BUILD_NUMBER:-${{ github.run_id }}}"
-          echo "Scanning build: tripweaver-ci #${BUILD_NUMBER}"
-          jf build-scan "tripweaver-ci" "${BUILD_NUMBER}" --fail=false
+          echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
+          jf build-scan "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" --fail=false
 
       - name: Xray scan Docker images
         run: |
-          # Get the actual build number to link scans to build-info
-          BUILD_NUMBER="${JFROG_CLI_BUILD_NUMBER:-${{ github.run_id }}}"
+          echo "Scanning Docker images (automatically linked to build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER)..."
 
           echo "Scanning API image for vulnerabilities..."
-          jf docker scan $IMG_API@${API_DIGEST} --fail=false --format=table \
-            --build-name="tripweaver-ci" --build-number="${BUILD_NUMBER}"
+          jf docker scan $IMG_API@${API_DIGEST} --fail=false --format=table
 
           echo "Scanning Frontend image for vulnerabilities..."
-          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false --format=table \
-            --build-name="tripweaver-ci" --build-number="${BUILD_NUMBER}"
+          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false --format=table
 
           echo "Scanning Seedgen image for vulnerabilities..."
-          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false --format=table \
-            --build-name="tripweaver-ci" --build-number="${BUILD_NUMBER}"
+          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false --format=table
