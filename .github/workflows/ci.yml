@@ -127,7 +127,11 @@ jobs:
 
       # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
       - name: Xray scan build-info
-        run: jf build-scan "tripweaver-ci" "${{ github.run_id }}" --fail=false
+        run: |
+          # Get the actual build number from the JFrog CLI environment
+          BUILD_NUMBER="${JFROG_CLI_BUILD_NUMBER:-${{ github.run_id }}}"
+          echo "Scanning build: tripweaver-ci #${BUILD_NUMBER}"
+          jf build-scan "tripweaver-ci" "${BUILD_NUMBER}" --fail=false
 
       - name: Xray scan Docker images
         run: |
