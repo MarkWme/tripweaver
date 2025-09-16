@@ -5,8 +5,8 @@ on:
   pull_request:
 
 env:
-  BUILD_NAME: tripweaver
-  BUILD_NUMBER: ${{ github.run_id }}
+  JFROG_CLI_BUILD_NAME: tripweaver
+  JFROG_CLI_BUILD_NUMBER: ${{ github.run_id }}
   REGISTRY: ${{ vars.JFROG_REGISTRY }}         # e.g. <org>.jfrog.io
   IMG_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
   IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
@@ -31,7 +31,7 @@ jobs:
           JF_URL: ${{ vars.JF_URL }}
 
       - run: |
-          echo "Build: $BUILD_NAME #$BUILD_NUMBER"
+          echo "Build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
           jf -v
           jf rt ping
 
@@ -45,7 +45,7 @@ jobs:
           mkdir -p wheelhouse
           jf pip-config --repo-resolve "$JF_PYPI_REPO" || true
           jf pip download -r requirements.txt --dest wheelhouse \
-            --module api-pip --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+            --module api-pip
 
       # npm (frontend → module fe-npm)
       - name: Setup Node
@@ -68,7 +68,7 @@ jobs:
           ARTIFACTORY_NPM_REGISTRY: ${{ vars.ARTIFACTORY_NPM_REGISTRY }} # https://<org>.jfrog.io/artifactory/api/npm/npm/
         run: |
           jf npm-config --global=true --repo-resolve "$ARTIFACTORY_NPM_REGISTRY" || true
-          jf npm ci --module fe-npm --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf npm ci --module fe-npm
           rm -rf node_modules  # keep image slim; we only needed lockfile validation
 
       # NuGet (.NET → module seed-nuget)
@@ -78,7 +78,7 @@ jobs:
           ARTIFACTORY_NUGET_SOURCE: ${{ vars.ARTIFACTORY_NUGET_SOURCE }} # https://<org>.jfrog.io/artifactory/api/nuget/nuget
         run: |
           jf dotnet-config --repo-resolve "$ARTIFACTORY_NUGET_SOURCE" || true
-          jf dotnet restore --module seed-nuget --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf dotnet restore --module seed-nuget
 
       # ---- Build & push images (attach to SAME build) ----
       - uses: docker/setup-buildx-action@v3
@@ -86,24 +86,18 @@ jobs:
         run: echo "${{ steps.jf-setup.outputs.oidc-token }}" >/dev/null || true  # no-op; jf handles auth
       - name: Build+push API
         run: |
-          jf docker build -t $IMG_API:${{ github.sha }} -f api/Dockerfile api \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
-          jf docker push  $IMG_API:${{ github.sha }} \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker build -t $IMG_API:${{ github.sha }} -f api/Dockerfile api
+          jf docker push  $IMG_API:${{ github.sha }}
           echo "API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_API:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
       - name: Build+push Frontend
         run: |
-          jf docker build -t $IMG_FE:${{ github.sha }} -f frontend/Dockerfile frontend \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
-          jf docker push  $IMG_FE:${{ github.sha }} \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker build -t $IMG_FE:${{ github.sha }} -f frontend/Dockerfile frontend
+          jf docker push  $IMG_FE:${{ github.sha }}
           echo "FE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_FE:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
       - name: Build+push Seedgen
         run: |
-          jf docker build -t $IMG_SEED:${{ github.sha }} -f tools/seedgen/Dockerfile tools/seedgen \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
-          jf docker push  $IMG_SEED:${{ github.sha }} \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker build -t $IMG_SEED:${{ github.sha }} -f tools/seedgen/Dockerfile tools/seedgen
+          jf docker push  $IMG_SEED:${{ github.sha }}
           echo "SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_SEED:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
 
       # ---- SBOM (CycloneDX only; attach to build) ----
@@ -115,8 +109,7 @@ jobs:
           syft $IMG_API@${API_DIGEST}   -o cyclonedx-json > _sbom/api.cdx.json
           syft $IMG_FE@${FE_DIGEST}     -o cyclonedx-json > _sbom/frontend.cdx.json
           syft $IMG_SEED@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed.cdx.json
-          jf rt u "_sbom/*.json" "generic-local/sbom/$BUILD_NAME/$BUILD_NUMBER/" \
-            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf rt u "_sbom/*.json" "generic-local/sbom/$JFROG_CLI_BUILD_NAME/$JFROG_CLI_BUILD_NUMBER/"
 
       # ---- Sign images (Cosign keyless). Optional: set COSIGN_EXPERIMENTAL=1 if needed ----
       - uses: sigstore/cosign-installer@v3.7.0
@@ -130,8 +123,8 @@ jobs:
       # ---- Publish build-info once, then Xray-scan the BUILD ----
       - name: Publish build-info
         run: |
-          jf rt build-collect-env "$BUILD_NAME" "$BUILD_NUMBER"
-          jf rt build-add-git    "$BUILD_NAME" "$BUILD_NUMBER"
-          jf rt build-publish    "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
       - name: Xray scan (build gate)
-        run: jf xr scan --build "$BUILD_NAME" --build-number "$BUILD_NUMBER" --fail=true
+        run: jf xr scan --fail=true
