@@ -2,3 +2,4 @@ version: 1
 type: npm
 resolver:
     repo: cf-npm-remote
+    serverId: setup-jfrog-cli-server
