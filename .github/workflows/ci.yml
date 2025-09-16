@@ -118,11 +118,19 @@ jobs:
           cosign sign $IMG_FE@${FE_DIGEST}
           cosign sign $IMG_SEED@${SEED_DIGEST}
 
-      # ---- Publish build-info once, then Xray-scan the BUILD ----
+      # ---- Publish build-info once, then Xray-scan ----
       - name: Publish build-info
         run: |
           jf rt build-collect-env
           jf rt build-add-git
           jf rt build-publish
-      - name: Xray scan (build gate)
-        run: jf scan --build-name="tripweaver-ci" --build-number="${{ github.run_id }}" --fail=true
+
+      # ---- Xray scanning (multiple approaches) ----
+      - name: Xray scan build-info
+        run: jf build-scan "tripweaver-ci" "${{ github.run_id }}" --fail=true
+
+      - name: Xray scan Docker images
+        run: |
+          jf docker scan $IMG_API@${API_DIGEST} --fail=false
+          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false
+          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false
