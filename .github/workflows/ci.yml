@@ -10,7 +10,7 @@ env:
   REGISTRY: ${{ vars.JFROG_REGISTRY }}         # e.g. <org>.jfrog.io
   IMG_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
   IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
-  IMG_SEED:${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
+  IMG_SEED: ${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
 
 jobs:
   build:
