@@ -1,258 +1,117 @@
-name: CI - TripWeaver - Test, Build, SBOM, Sign and Publish
+name: tripweaver-ci
 
 on:
-  push:
-    branches: [ main ]
+  push: { branches: [main] }
   pull_request:
-    branches: [ main ]
 
 env:
-  IMAGE_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
-  IMAGE_FRONTEND: ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
-  IMAGE_SEED: ${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
+  BUILD_NAME: tripweaver
+  BUILD_NUMBER: ${{ github.run_id }}
+  REGISTRY: ${{ vars.JFROG_REGISTRY }}         # e.g. <org>.jfrog.io
+  IMG_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
+  IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
+  IMG_SEED:${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
 
 jobs:
-  test:
-    name: Run tests (Python, C#, Frontend sanity)
+  build:
     runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+      # ---- JFrog CLI (OIDC) ----
+      - uses: jfrog/setup-jfrog-cli@v4
         with:
-          python-version: 3.11
+          version: latest
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+        env: { JF_URL: ${{ vars.JF_URL }} }
 
-      - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r api/requirements.txt
-
-      - name: Run Python tests
-        working-directory: api
-        run: |
-          PYTHONPATH=. pytest -q
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Run seedgen tests
-        working-directory: tools/seedgen
-        run: dotnet test --nologo
-
-      - name: Node sanity test
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-      - name: Run frontend offline sanity
-        working-directory: frontend
-        run: node test/client-sanity.js
-
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-tests
-          path: api/.pytest_cache || true
-
-  build_and_publish:
-    name: Build and Publish TripWeaver components
-    runs-on: ubuntu-latest
-    needs: test
-    permissions:
-      contents: read
-      id-token: write
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Set up JFrog CLI (jf) via OIDC
-        uses: jfrog/setup-jfrog-cli@v4
-        with:
-          version: 'latest'
-          oidc-provider-name: MarkWme/tripweaver@github
-        env:
-          JF_URL: ${{ vars.JF_URL }}
-          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure JFrog CLI (debug)
-        env:
-          JFROG_CLI_OFFER_CONFIG: 'false'
-          JF_URL: ${{ vars.JF_URL }}
-          # JFROG_CLI_LOG_LEVEL: DEBUG
-        run: |
-          echo "DEBUG: JF_URL set? $( [ -n "$JF_URL" ] && echo yes || echo no )"
+      - run: |
+          echo "Build: $BUILD_NAME #$BUILD_NUMBER"
           jf -v
-          echo "OIDC authenticated Artifactory server"
+          jf rt ping
 
-      - name: Debug JFrog connection
-        run: |
-          echo "Testing Artifactory connection (OIDC)"
-          jf rt ping || true
-          jf c show
-
-      - name: Prepare Python dependencies (wheelhouse via Artifactory)
+      # ---- Resolve deps via Artifactory and ATTACH AS MODULES ----
+      # Python (pip → module api-pip)
+      - name: Pip resolve via Artifactory
         working-directory: api
-        env:
-          JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }}
+        env: { JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }} }   # virtual (e.g. pypi)
         run: |
-          # JF_PYPI_REPO should be the Artifactory repo key (e.g. 'pypi-virtual')
-          # OIDC auth already established; jf will use that to access the repo.
           mkdir -p wheelhouse
-          # Configure pip to use Artifactory repo (virtual or remote) via jf
-          jf pip-config --repo-resolve $JF_PYPI_REPO || true
-          # Download wheels (no install) so Docker build can be offline
-          jf pip download -r requirements.txt --dest wheelhouse
-          ls -1 wheelhouse
+          jf pip-config --repo-resolve "$JF_PYPI_REPO" || true
+          jf pip download -r requirements.txt --dest wheelhouse \
+            --module api-pip --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
 
-      - name: Build, tag and push API image with JFrog
+      # npm (frontend → module fe-npm)
+      - name: NPM resolve via Artifactory
+        working-directory: frontend
         env:
-          IMAGE_NAME: ${{ env.IMAGE_API }}:${{ github.sha }}
+          ARTIFACTORY_NPM_REGISTRY: ${{ vars.ARTIFACTORY_NPM_REGISTRY }} # https://<org>.jfrog.io/artifactory/api/npm/npm/
         run: |
-          jf docker build -t $IMAGE_NAME -f ./api/Dockerfile ./api
-          jf docker push $IMAGE_NAME
-          API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
-          echo "API image digest: $API_DIGEST"
-          echo "API_DIGEST=$API_DIGEST" >> $GITHUB_ENV
-          jf rt build-collect-env
-          jf rt build-add-git
-          jf rt build-publish
+          jf npm-config --global=true --repo-resolve "$ARTIFACTORY_NPM_REGISTRY" || true
+          jf npm ci --module fe-npm --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          rm -rf node_modules  # keep image slim; we only needed lockfile validation
 
-      - name: Xray scan API image
+      # NuGet (.NET → module seed-nuget)
+      - name: NuGet resolve via Artifactory
+        working-directory: tools/seedgen
+        env: { ARTIFACTORY_NUGET_SOURCE: ${{ vars.ARTIFACTORY_NUGET_SOURCE }} } # https://<org>.jfrog.io/artifactory/api/nuget/nuget
         run: |
-          mkdir -p xray
-          echo "Scanning API image early"
-          jf docker scan ${{ env.IMAGE_API }}:${{ github.sha }} --format json > xray/api-scan.json || echo '{"scan":"failed"}' > xray/api-scan.json
+          jf dotnet-config --repo-resolve "$ARTIFACTORY_NUGET_SOURCE" || true
+          jf dotnet restore --module seed-nuget --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
 
-      - name: Build, tag and push Frontend image with JFrog
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+      # ---- Build & push images (attach to SAME build) ----
+      - uses: docker/setup-buildx-action@v3
+      - name: Docker login
+        run: echo "${{ steps.jf-setup.outputs.oidc-token }}" >/dev/null || true  # no-op; jf handles auth
+      - name: Build+push API
         run: |
-          jf docker build \
-            --build-arg ARTIFACTORY_NPM_REGISTRY=${{ vars.ARTIFACTORY_NPM_REGISTRY }} \
-            --build-arg ARTIFACTORY_NPM_AUTH_TOKEN=${{ secrets.ARTIFACTORY_NPM_AUTH_TOKEN }} \
-            -t $IMAGE_NAME -f ./frontend/Dockerfile ./frontend
-          jf docker push $IMAGE_NAME
-          FRONTEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
-          echo "Frontend image digest: $FRONTEND_DIGEST"
-          echo "FRONTEND_DIGEST=$FRONTEND_DIGEST" >> $GITHUB_ENV
-          jf rt build-collect-env
-          jf rt build-add-git
-          jf rt build-publish
-
-      - name: Xray scan Frontend image
+          jf docker build -t $IMG_API:${{ github.sha }} -f api/Dockerfile api \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker push  $IMG_API:${{ github.sha }} \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          echo "API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_API:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
+      - name: Build+push Frontend
         run: |
-          mkdir -p xray
-          echo "Scanning Frontend image early"
-          jf docker scan ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} --format json > xray/frontend-scan.json || echo '{"scan":"failed"}' > xray/frontend-scan.json
-
-      - name: Build and push seedgen image with JFrog
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_SEED }}:${{ github.sha }}
+          jf docker build -t $IMG_FE:${{ github.sha }} -f frontend/Dockerfile frontend \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker push  $IMG_FE:${{ github.sha }} \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          echo "FE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_FE:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
+      - name: Build+push Seedgen
         run: |
-          jf docker build \
-            --build-arg ARTIFACTORY_NUGET_SOURCE=${{ vars.ARTIFACTORY_NUGET_SOURCE }} \
-            --build-arg ARTIFACTORY_NUGET_USERNAME=${{ secrets.ARTIFACTORY_NUGET_USERNAME }} \
-            --build-arg ARTIFACTORY_NUGET_PASSWORD=${{ secrets.ARTIFACTORY_NUGET_PASSWORD }} \
-            -t $IMAGE_NAME -f ./tools/seedgen/Dockerfile ./tools/seedgen
-          jf docker push $IMAGE_NAME
-          SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME | cut -d'@' -f2)
-          echo "Seed image digest: $SEED_DIGEST"
-          echo "SEED_DIGEST=$SEED_DIGEST" >> $GITHUB_ENV
-          jf rt build-collect-env
-          jf rt build-add-git
-          jf rt build-publish
+          jf docker build -t $IMG_SEED:${{ github.sha }} -f tools/seedgen/Dockerfile tools/seedgen \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          jf docker push  $IMG_SEED:${{ github.sha }} \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          echo "SEED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMG_SEED:${{ github.sha }} | cut -d'@' -f2)" >> $GITHUB_ENV
 
-      - name: Xray scan Seed image
+      # ---- SBOM (CycloneDX only; attach to build) ----
+      - name: Install Syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Generate+upload SBOMs
         run: |
-          mkdir -p xray
-          echo "Scanning Seed image early"
-          jf docker scan ${{ env.IMAGE_SEED }}:${{ github.sha }} --format json > xray/seed-scan.json || echo '{"scan":"failed"}' > xray/seed-scan.json
+          mkdir -p _sbom
+          syft $IMG_API@${API_DIGEST}   -o cyclonedx-json > _sbom/api.cdx.json
+          syft $IMG_FE@${FE_DIGEST}     -o cyclonedx-json > _sbom/frontend.cdx.json
+          syft $IMG_SEED@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed.cdx.json
+          jf rt u "_sbom/*.json" "generic-local/sbom/$BUILD_NAME/$BUILD_NUMBER/" \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
 
-      - name: Install Syft (SBOM)
+      # ---- Sign images (Cosign keyless). Optional: set COSIGN_EXPERIMENTAL=1 if needed ----
+      - uses: sigstore/cosign-installer@v3.7.0
+      - name: Sign images
+        env: { COSIGN_YES: "true" }
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          cosign sign $IMG_API@${API_DIGEST}
+          cosign sign $IMG_FE@${FE_DIGEST}
+          cosign sign $IMG_SEED@${SEED_DIGEST}
 
-      - name: Prepare SBOM directory
-        run: mkdir -p _sbom
-
-      - name: Generate SBOMs (API)
+      # ---- Publish build-info once, then Xray-scan the BUILD ----
+      - name: Publish build-info
         run: |
-          mkdir -p _sbom/api
-          syft ${IMAGE_API}@${API_DIGEST} -o json > _sbom/api/syft.json
-          syft ${IMAGE_API}@${API_DIGEST} -o spdx-json > _sbom/api/spdx.json
-          syft ${IMAGE_API}@${API_DIGEST} -o cyclonedx-json > _sbom/api/cyclonedx.json
-      - name: Generate SBOMs (Frontend)
-        run: |
-          mkdir -p _sbom/frontend
-          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o json > _sbom/frontend/syft.json
-          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o spdx-json > _sbom/frontend/spdx.json
-          syft ${IMAGE_FRONTEND}@${FRONTEND_DIGEST} -o cyclonedx-json > _sbom/frontend/cyclonedx.json
-      - name: Generate SBOMs (Seed)
-        run: |
-          mkdir -p _sbom/seed
-          syft ${IMAGE_SEED}@${SEED_DIGEST} -o json > _sbom/seed/syft.json
-          syft ${IMAGE_SEED}@${SEED_DIGEST} -o spdx-json > _sbom/seed/spdx.json
-          syft ${IMAGE_SEED}@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed/cyclonedx.json
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-artifacts
-          path: _sbom
-
-      - name: Upload SBOMs to Artifactory
-        run: |
-          jfrog rt u "_sbom/**/*" ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/ --recursive=true --flat=false
-        env:
-          JFROG_REPO: ${{ secrets.JFROG_REPO }}
-
-      # - name: Sign images (optional)
-      #        if: ${{ secrets.COSIGN_KEY != '' }}
-      #        env:
-      #          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
-      #        run: |
-      #          curl -sSL "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
-      #          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_API }}:${{ github.sha }} || true
-      #          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_FRONTEND }}:${{ github.sha }} || true
-      #          /usr/local/bin/cosign sign --key ${COSIGN_KEY} ${{ env.IMAGE_SEED }}:${{ github.sha }} || true
-
-      - name: Publish image metadata (log summary)
-        run: |
-          echo "Built images:"
-          echo " - ${{ env.IMAGE_API }}:${{ github.sha }}"
-          echo " - ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}"
-          echo " - ${{ env.IMAGE_SEED }}:${{ github.sha }}"
-          echo "SBOMs (syft, SPDX, CycloneDX) stored under commit path: ${JFROG_REPO:-tripweaver-sbom}/$GITHUB_SHA/(api|frontend|seed)/"
-          echo "Digests:"
-          echo "  API: ${API_DIGEST}"
-          echo "  Frontend: ${FRONTEND_DIGEST}"
-          echo "  Seed: ${SEED_DIGEST}"
-        env:
-          JFROG_REPO: ${{ secrets.JFROG_REPO }}
-
-      - name: Persist SBOM logs as workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-logs
-          path: _sbom
-
-
-      - name: Upload Xray scan artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: xray-scans
-          path: xray
-
-      - name: Upload Xray scans to Artifactory
-        run: |
-          jfrog rt u "xray/*.json" ${JFROG_REPO:-tripweaver-scans}/$GITHUB_SHA/ --flat=true || true
-        env:
-          JFROG_REPO: ${{ secrets.JFROG_REPO }}
+          jf rt build-collect-env "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt build-add-git    "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt build-publish    "$BUILD_NAME" "$BUILD_NUMBER"
+      - name: Xray scan (build gate)
+        run: jf xr scan --build "$BUILD_NAME" --build-number "$BUILD_NUMBER" --fail=true
