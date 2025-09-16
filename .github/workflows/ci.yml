@@ -48,6 +48,20 @@ jobs:
             --module api-pip --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
 
       # npm (frontend → module fe-npm)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate lockfile completeness
+        working-directory: frontend
+        run: |
+          if ! jq '.packages | length' package-lock.json >/dev/null 2>&1; then
+            echo "::error::package-lock.json is not valid JSON or missing .packages section"; exit 1; fi
+          COUNT=$(jq '.packages | length' package-lock.json)
+          if [ "$COUNT" -le 1 ]; then
+            echo "::error::package-lock.json appears incomplete (packages length=$COUNT). Regenerate with: npm install --package-lock-only"; exit 1; fi
+          if ! grep -q '"integrity"' package-lock.json; then
+            echo "::error::No integrity fields found in lock file; regenerate with a modern npm."; exit 1; fi
       - name: NPM resolve via Artifactory
         working-directory: frontend
         env:
