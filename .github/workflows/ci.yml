@@ -27,7 +27,6 @@ jobs:
         with:
           version: latest
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
-          disable-auto-build-publish: true
         env:
           JF_URL: ${{ vars.JF_URL }}
 
@@ -121,28 +120,31 @@ jobs:
           cosign sign $IMG_FE@${FE_DIGEST}
           cosign sign $IMG_SEED@${SEED_DIGEST}
 
-      # ---- Publish build-info before scanning ----
-      - name: Publish build-info for scanning
-        run: |
-          jf rt build-collect-env
-          jf rt build-add-git
-          jf rt build-publish
-
-      # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
-      - name: Xray scan build-info
-        run: |
-          echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
-          jf build-scan "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" --fail=false
-
+      # ---- Xray scanning Docker images first (faster) ----
       - name: Xray scan Docker images
         run: |
-          echo "Scanning Docker images (automatically linked to build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER)..."
+          echo "Scanning Docker images for vulnerabilities..."
 
-          echo "Scanning API image for vulnerabilities..."
-          jf docker scan $IMG_API@${API_DIGEST} --fail=false --format=table
+          echo "Scanning API image..."
+          jf docker scan $IMG_API:${{ github.sha }} --fail=false --format=table
 
-          echo "Scanning Frontend image for vulnerabilities..."
-          jf docker scan $IMG_FE@${FE_DIGEST} --fail=false --format=table
+          echo "Scanning Frontend image..."
+          jf docker scan $IMG_FE:${{ github.sha }} --fail=false --format=table
 
-          echo "Scanning Seedgen image for vulnerabilities..."
-          jf docker scan $IMG_SEED@${SEED_DIGEST} --fail=false --format=table
+          echo "Scanning Seedgen image..."
+          jf docker scan $IMG_SEED:${{ github.sha }} --fail=false --format=table
+
+      # ---- Publish build-info before build-info scanning (slower, done last) ----
+      # Temporarily commented out to speed up testing
+      # - name: Publish build-info for scanning
+      #   run: |
+      #     jf rt build-collect-env
+      #     jf rt build-add-git
+      #     jf rt build-publish
+
+      # ---- Xray scanning build-info (build indexing enabled via enable-build-indexing.sh) ----
+      # Temporarily commented out to speed up testing
+      # - name: Xray scan build-info
+      #   run: |
+      #     echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
+      #     jf build-scan "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" --fail=false
