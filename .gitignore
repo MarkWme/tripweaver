@@ -1,6 +1,6 @@
 # Node
 node_modules/
-/.next
+/.next/
 /dist
 
 # Python
@@ -12,6 +12,7 @@ __pycache__/
 # .NET
 bin/
 obj/
+tools/data/
 
 # Docker
 *.tar
