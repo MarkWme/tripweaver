@@ -9,6 +9,8 @@ env:
   IMG_API: ${{ vars.JFROG_REGISTRY }}/tripweaver-api
   IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
   IMG_SEED: ${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
+  # Enable command summaries for GitHub Actions integration
+  JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR: ${{ runner.temp }}/jfrog-command-summaries
 
 jobs:
   build:
@@ -118,14 +120,8 @@ jobs:
           cosign sign $IMG_FE@${FE_DIGEST}
           cosign sign $IMG_SEED@${SEED_DIGEST}
 
-      # ---- Publish build-info once, then Xray-scan ----
-      - name: Publish build-info
-        run: |
-          jf rt build-collect-env
-          jf rt build-add-git
-          jf rt build-publish
-
       # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
+      # Note: build-info will be automatically published at workflow completion
       - name: Xray scan build-info
         run: |
           echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
