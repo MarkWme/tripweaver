@@ -10,7 +10,7 @@ env:
   IMG_FE:  ${{ vars.JFROG_REGISTRY }}/tripweaver-frontend
   IMG_SEED: ${{ vars.JFROG_REGISTRY }}/tripweaver-seedgen
   # Enable command summaries for GitHub Actions integration
-  JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR: ${{ runner.temp }}/jfrog-command-summaries
+  # JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR: ${{ runner.temp }}/jfrog-command-summaries
 
 jobs:
   build:
