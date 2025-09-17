@@ -18,6 +18,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +30,7 @@ jobs:
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
         env:
           JF_URL: ${{ vars.JF_URL }}
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: |
           echo "JFrog CLI configured and ready"
