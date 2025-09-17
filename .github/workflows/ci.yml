@@ -135,16 +135,14 @@ jobs:
           jf docker scan $IMG_SEED:${{ github.sha }} --fail=false --format=table
 
       # ---- Publish build-info before build-info scanning (slower, done last) ----
-      # Temporarily commented out to speed up testing
-      # - name: Publish build-info for scanning
-      #   run: |
-      #     jf rt build-collect-env
-      #     jf rt build-add-git
-      #     jf rt build-publish
+      - name: Publish build-info for scanning
+        run: |
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
 
       # ---- Xray scanning build-info (build indexing enabled via enable-build-indexing.sh) ----
-      # Temporarily commented out to speed up testing
-      # - name: Xray scan build-info
-      #   run: |
-      #     echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
-      #     jf build-scan "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" --fail=false
+      - name: Xray scan build-info
+        run: |
+          echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
+          jf build-scan "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" --fail=false
