@@ -27,6 +27,7 @@ jobs:
         with:
           version: latest
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+          disable-auto-build-publish: true
         env:
           JF_URL: ${{ vars.JF_URL }}
 
@@ -120,8 +121,14 @@ jobs:
           cosign sign $IMG_FE@${FE_DIGEST}
           cosign sign $IMG_SEED@${SEED_DIGEST}
 
+      # ---- Publish build-info before scanning ----
+      - name: Publish build-info for scanning
+        run: |
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
+
       # ---- Xray scanning (build indexing enabled via enable-build-indexing.sh) ----
-      # Note: build-info will be automatically published at workflow completion
       - name: Xray scan build-info
         run: |
           echo "Scanning build: $JFROG_CLI_BUILD_NAME #$JFROG_CLI_BUILD_NUMBER"
