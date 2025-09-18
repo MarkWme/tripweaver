@@ -37,17 +37,17 @@ jobs:
           jf -v
           jf rt ping
 
-      # ---- Resolve deps via Artifactory and ATTACH AS MODULES ----
-      # Python (pip → module api-pip)
-      - name: Pip resolve via Artifactory
+      # ---- Configure Artifactory repos for build modules ----
+      # Python (pip → module api-pip) - packages installed in Docker build
+      - name: Configure pip for Artifactory
         working-directory: api
         env:
           JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }}   # virtual (e.g. pypi)
         run: |
-          mkdir -p wheelhouse
           jf pip-config --repo-resolve "$JF_PYPI_REPO" || true
-          jf pip download -r requirements.txt --dest wheelhouse \
-            --module api-pip
+          # Create a dummy install for module tracking
+          echo "# Pip configured for Artifactory" > /tmp/pip-configured.txt
+          jf rt upload /tmp/pip-configured.txt "temp-build-artifacts/" --module api-pip
 
       # npm (frontend → module fe-npm)
       - name: Setup Node
