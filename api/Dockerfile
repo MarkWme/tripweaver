@@ -22,9 +22,9 @@ COPY . /app
 
 # Update PATH to include user-installed packages
 ENV PATH="/home/nonroot/.local/bin:$PATH"
-ENV PYTHONPATH="/home/nonroot/.local/lib/python3.11/site-packages:$PYTHONPATH"
+ENV PYTHONPATH="/home/nonroot/.local/lib/python3.11/site-packages"
 
 # Security: Expose only necessary port
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/usr/bin/python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
