@@ -45,9 +45,7 @@ jobs:
           JF_PYPI_REPO: ${{ vars.JF_PYPI_REPO }}   # virtual (e.g. pypi)
         run: |
           jf pip-config --repo-resolve "$JF_PYPI_REPO" || true
-          # Create a dummy install for module tracking
-          echo "# Pip configured for Artifactory" > /tmp/pip-configured.txt
-          jf rt upload /tmp/pip-configured.txt "temp-build-artifacts/" --module api-pip
+          echo "Pip configured to use Artifactory repository: $JF_PYPI_REPO"
 
       # npm (frontend → module fe-npm)
       - name: Setup Node
