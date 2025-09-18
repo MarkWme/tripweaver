@@ -1,0 +1,114 @@
+# PAM Monitoring Configuration for CVE-2025-8941
+# This configuration can be used with logging and monitoring systems
+# to detect potential exploitation attempts
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pam-monitoring-config
+  namespace: tripweaver
+data:
+  # Falco rules for PAM-related security events
+  pam-security-rules.yaml: |
+    - rule: PAM Authentication Anomaly
+      desc: Detect unusual PAM authentication patterns that might indicate CVE-2025-8941 exploitation
+      condition: >
+        spawned_process and
+        (proc.name contains "pam" or proc.cmdline contains "pam_namespace") and
+        not user.name in (tripweaver, root)
+      output: >
+        PAM authentication anomaly detected (user=%user.name command=%proc.cmdline 
+        container_id=%container.id image=%container.image.repository:%container.image.tag)
+      priority: HIGH
+      tags: [pam, authentication, cve-2025-8941]
+
+    - rule: Privilege Escalation Attempt
+      desc: Detect potential privilege escalation attempts
+      condition: >
+        spawned_process and
+        proc.pname exists and
+        user.name != root and
+        proc.aname[2] exists and proc.aname[2] startswith "su"
+      output: >
+        Potential privilege escalation attempt (user=%user.name parent=%proc.pname 
+        command=%proc.cmdline container_id=%container.id)
+      priority: CRITICAL
+      tags: [privilege-escalation, security, cve-2025-8941]
+
+    - rule: Symlink Creation in Security Context  
+      desc: Detect symlink creation that might be part of CVE-2025-8941 exploitation
+      condition: >
+        spawned_process and
+        (proc.name=ln and contains(proc.args, "-s")) and
+        (fd.directory contains "/etc/security" or fd.directory contains "/var/run")
+      output: >
+        Suspicious symlink creation detected (user=%user.name command=%proc.cmdline 
+        directory=%fd.directory container_id=%container.id)
+      priority: HIGH  
+      tags: [symlink, filesystem, cve-2025-8941]
+
+  # Fluentd configuration for PAM log collection
+  fluent.conf: |
+    <source>
+      @type tail
+      path /var/log/auth.log
+      pos_file /var/log/fluentd-auth.log.pos
+      tag pam.auth
+      format /^(?<timestamp>\w+ \d+ \d+:\d+:\d+) (?<hostname>\S+) (?<process>\S+): (?<message>.*)$/
+      time_key timestamp
+      time_format %b %d %H:%M:%S
+    </source>
+
+    <filter pam.auth>
+      @type grep
+      <regexp>
+        key message
+        pattern (pam_namespace|authentication failure|session opened|session closed)
+      </regexp>
+    </filter>
+
+    <match pam.auth>
+      @type elasticsearch
+      host elasticsearch.monitoring.svc.cluster.local
+      port 9200
+      index_name pam-security-logs
+      type_name _doc
+      include_tag_key true
+      tag_key @log_name
+      flush_interval 10s
+    </match>
+
+  # Prometheus monitoring rules
+  prometheus-rules.yaml: |
+    groups:
+    - name: pam-security
+      rules:
+      - alert: PAMAuthenticationFailures
+        expr: rate(pam_authentication_failures_total[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: warning
+          cve: CVE-2025-8941
+        annotations:
+          summary: "High rate of PAM authentication failures"
+          description: "PAM authentication failure rate is {{ $value }} per second"
+
+      - alert: PrivilegeEscalationAttempt
+        expr: privilege_escalation_attempts_total > 0
+        for: 0s
+        labels:
+          severity: critical
+          cve: CVE-2025-8941  
+        annotations:
+          summary: "Privilege escalation attempt detected"
+          description: "Potential CVE-2025-8941 exploitation attempt detected"
+
+      - alert: SuspiciousSymlinkCreation
+        expr: rate(suspicious_symlinks_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: high
+          cve: CVE-2025-8941
+        annotations:
+          summary: "Suspicious symlink creation detected" 
+          description: "Potential symlink attack related to CVE-2025-8941"
