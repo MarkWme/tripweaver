@@ -21,7 +21,22 @@ RUN npm run build || true
 
 FROM node:18-alpine
 WORKDIR /app
+
+# Security: Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
 COPY --from=builder /app .
+
+# Change ownership to non-root user
+RUN chown -R nextjs:nodejs /app
+
+# Switch to non-root user
+USER nextjs
+
+# Security: Expose only necessary port
 EXPOSE 3000
+
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
 CMD ["npm","start"]

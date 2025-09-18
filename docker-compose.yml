@@ -7,6 +7,24 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data:ro
+    # Security hardening for CVE-2023-45853 mitigation
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
   frontend:
     image: tripweaver-frontend:local
     build: ./frontend
@@ -16,3 +34,22 @@ services:
       - NEXT_PUBLIC_API=http://host.docker.internal:8000
     volumes:
       - ./data:/app/data:ro
+    # Security hardening for CVE-2023-45853 mitigation
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /app/.next/cache:noexec,nosuid,size=100m
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
