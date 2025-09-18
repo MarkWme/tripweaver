@@ -7,6 +7,27 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data:ro
+    # CVE-2025-6297 Mitigation: Resource limits and secure temp handling
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    tmpfs:
+      # Secure tmpfs for temporary files to prevent disk exhaustion
+      - /app/secure-temp:size=100M,mode=0750
+      - /tmp/app-secure:size=50M,mode=0700
+    # Additional security for CVE-2025-6297
+    read_only: false  # Required for application functionality
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TMPDIR=/app/secure-temp
+      - TEMP=/app/secure-temp 
+      - TMP=/app/secure-temp
   frontend:
     image: tripweaver-frontend:local
     build: ./frontend
@@ -16,3 +37,16 @@ services:
       - NEXT_PUBLIC_API=http://host.docker.internal:8000
     volumes:
       - ./data:/app/data:ro
+    # Resource limits for frontend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    tmpfs:
+      - /tmp:size=50M,mode=0700
+    security_opt:
+      - no-new-privileges:true
