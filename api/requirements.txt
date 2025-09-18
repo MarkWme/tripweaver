@@ -4,5 +4,5 @@ pydantic==1.10.12
 python-multipart==0.0.6
 pytest==7.4.2
 
-# Intentional vulnerable dependency for Xray test (requests 2.25.1 - CVE-2021-33503)
-requests==2.25.1
+# Fixed security vulnerability CVE-2023-32681 - updated from 2.25.1 to 2.31.0
+requests>=2.31.0
