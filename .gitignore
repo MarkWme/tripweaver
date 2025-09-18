@@ -25,3 +25,6 @@ wheelhouse/
 
 # VS Code
 .vscode/
+
+# Security monitoring logs (CVE-2025-6297 mitigation)
+scripts/*.log
