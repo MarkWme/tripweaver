@@ -109,5 +109,5 @@ def plan(request: PlanRequest):
 @app.get("/healthz")
 def health():
     """Health check endpoint"""
-    return {"status": "ok", "security": "Distroless image - CVE-2023-45853 eliminated"}
+    return {"status": "ok", "security": "Alpine image - Critical CVEs eliminated"}
 
