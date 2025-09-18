@@ -1,8 +1,16 @@
 name: tripweaver-ci
 
 on:
-  push: { branches: [main] }
+  push:
+    branches: [main]
+    # Skip full CI for dependency-only changes (fast-validate handles those)
+    paths-ignore:
+      - 'api/requirements.txt'
+      - 'frontend/package.json'
   pull_request:
+    # Always run on PRs for comprehensive validation
+  workflow_dispatch:
+    # Allow manual triggering
 
 env:
   REGISTRY: ${{ vars.JFROG_REGISTRY }}         # e.g. <org>.jfrog.io
