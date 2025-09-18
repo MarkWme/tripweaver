@@ -1,5 +1,8 @@
-FROM python:3.11-slim AS base
+FROM python:3.11-slim-bookworm AS base
 WORKDIR /app
+
+# Update system packages to ensure latest security patches
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency metadata first
 COPY requirements.txt ./
