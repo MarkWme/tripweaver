@@ -8,3 +8,19 @@ image:
 service:
   type: ClusterIP
   port: 8000
+
+# Security hardening configuration for CVE-2025-8941 mitigation
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false

@@ -20,5 +20,17 @@ RUN set -e; \
 
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS seed
 WORKDIR /app
+
+# Create non-root user for security hardening
+RUN groupadd -r tripweaver && useradd -r -g tripweaver -s /bin/false -c "TripWeaver Seedgen User" tripweaver
+
 COPY --from=build /app/publish .
+
+# Set ownership and permissions for the application directory
+RUN chown -R tripweaver:tripweaver /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER tripweaver
+
 ENTRYPOINT ["dotnet","seedgen.dll"]

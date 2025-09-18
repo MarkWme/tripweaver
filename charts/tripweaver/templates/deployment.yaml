@@ -12,6 +12,14 @@ spec:
       labels:
         app: tripweaver-api
     spec:
+      # Security hardening for CVE-2025-8941 mitigation
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot | default true }}
+        runAsUser: {{ .Values.securityContext.runAsUser | default 1001 }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup | default 1001 }}
+        fsGroup: {{ .Values.securityContext.fsGroup | default 1001 }}
+        seccompProfile:
+          type: {{ .Values.securityContext.seccompProfile.type | default "RuntimeDefault" }}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -23,6 +31,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          # Container-level security context
+          securityContext:
+            runAsNonRoot: {{ .Values.containerSecurityContext.runAsNonRoot | default true }}
+            runAsUser: {{ .Values.containerSecurityContext.runAsUser | default 1001 }}
+            runAsGroup: {{ .Values.containerSecurityContext.runAsGroup | default 1001 }}
+            readOnlyRootFilesystem: {{ .Values.containerSecurityContext.readOnlyRootFilesystem | default false }}
+            allowPrivilegeEscalation: {{ .Values.containerSecurityContext.allowPrivilegeEscalation | default false }}
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
       volumes:
         - name: data
           emptyDir: {}

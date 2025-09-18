@@ -21,7 +21,20 @@ RUN npm run build || true
 
 FROM node:18-alpine
 WORKDIR /app
+
+# Create non-root user for security hardening
+RUN addgroup -g 1001 -S tripweaver && \
+    adduser -S tripweaver -u 1001 -G tripweaver
+
 COPY --from=builder /app .
+
+# Set ownership and permissions for the application directory
+RUN chown -R tripweaver:tripweaver /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER tripweaver
+
 EXPOSE 3000
 ENV NODE_ENV=production
 CMD ["npm","start"]

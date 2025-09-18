@@ -7,6 +7,14 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data:ro
+    # Security hardening for CVE-2025-8941 mitigation
+    user: "1001:1001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
   frontend:
     image: tripweaver-frontend:local
     build: ./frontend
@@ -16,3 +24,11 @@ services:
       - NEXT_PUBLIC_API=http://host.docker.internal:8000
     volumes:
       - ./data:/app/data:ro
+    # Security hardening
+    user: "1001:1001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
