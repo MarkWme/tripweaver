@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="TripWeaver API")
 
-# Security middleware for CVE-2023-45853 mitigation
+# Security middleware for enhanced distroless security
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
-    """Add security headers to mitigate various attack vectors including file-based attacks"""
+    """Add security headers to mitigate various attack vectors"""
     response = await call_next(request)
     
     # Security headers to prevent various attacks
@@ -109,5 +109,5 @@ def plan(request: PlanRequest):
 @app.get("/healthz")
 def health():
     """Health check endpoint"""
-    return {"status": "ok", "security": "CVE-2023-45853 mitigations active"}
+    return {"status": "ok", "security": "Distroless image - CVE-2023-45853 eliminated"}
 
