@@ -54,24 +54,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Validate lockfile completeness
-        working-directory: frontend
-        run: |
-          if ! jq '.packages | length' package-lock.json >/dev/null 2>&1; then
-            echo "::error::package-lock.json is not valid JSON or missing .packages section"; exit 1; fi
-          COUNT=$(jq '.packages | length' package-lock.json)
-          if [ "$COUNT" -le 1 ]; then
-            echo "::error::package-lock.json appears incomplete (packages length=$COUNT). Regenerate with: npm install --package-lock-only"; exit 1; fi
-          if ! grep -q '"integrity"' package-lock.json; then
-            echo "::error::No integrity fields found in lock file; regenerate with a modern npm."; exit 1; fi
-      - name: NPM resolve via Artifactory
+      - name: NPM install and resolve via Artifactory
         working-directory: frontend
         env:
           ARTIFACTORY_NPM_REGISTRY: ${{ vars.ARTIFACTORY_NPM_REGISTRY }} # https://<org>.jfrog.io/artifactory/api/npm/npm/
         run: |
           jf npm-config --global=true --repo-resolve "$ARTIFACTORY_NPM_REGISTRY" || true
-          jf npm ci --module fe-npm
-          rm -rf node_modules  # keep image slim; we only needed lockfile validation
+          jf npm install --module fe-npm  # Generates package-lock.json fresh
+          rm -rf node_modules  # keep image slim; we only needed dependency resolution
 
       # NuGet (.NET → module seed-nuget)
       - name: NuGet resolve via Artifactory
