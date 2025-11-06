@@ -8,51 +8,65 @@ permissions:
 jobs:
   debug-oidc:
     runs-on: ubuntu-latest
-    env:
-      # Define in GitHub → Settings → Variables
-      # JF_URL e.g. https://solengeu.jfrog.io
-      # JF_PROVIDER_NAME e.g. github-oidc
-      JF_URL: ${{ vars.JF_URL }}
-      JF_PROVIDER_NAME: ${{ vars.JF_OIDC_PROVIDER }}
-
     steps:
-      - name: Fetch GitHub OIDC ID token
-        id: gh-oidc
+      - name: Get OIDC token for JFrog
+        id: oidc
         run: |
           set -euo pipefail
-          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?missing}"
-          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?missing}"
-          : "${JF_URL:?missing}"
-
-          AUD="${JF_URL%/}"
+          AUD="${{ vars.JF_URL }}"
+          AUD="${AUD%/}"
           URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUD}"
+          TOKEN_JSON=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$URL")
+          TOKEN=$(echo "$TOKEN_JSON" | jq -r '.value')
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$TOKEN_JSON" > gh-oidc-response.json
 
-          RESP="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${URL}")"
-          echo "${RESP}" | jq -e .value >/dev/null
-          echo "idtoken=$(echo "${RESP}" | jq -r .value)" >> "$GITHUB_OUTPUT"
-
-      - name: Show ID token claims (bash+jq only)
+      - name: Show claims
         run: |
-          set -euo pipefail
-          TOK="${TOKEN:?missing}"
-          PAYLOAD="$(printf '%s' "$TOK" | cut -d. -f2 | tr '_-' '/+')"
-          # pad for base64
-          rem=$(( ${#PAYLOAD} % 4 ))
-          if [ "$rem" -eq 2 ]; then PAYLOAD="${PAYLOAD}=="; elif [ "$rem" -eq 3 ]; then PAYLOAD="${PAYLOAD}="; fi
-          printf '%s' "$PAYLOAD" | base64 -d | jq .
-        env:
-          TOKEN: ${{ steps.gh-oidc.outputs.idtoken }}
+          echo "${{ steps.oidc.outputs.token }}" \
+          | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq .
 
       - name: Exchange ID token at JFrog
         id: jf-exchange
+        env:
+          IDTOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          : "${JF_URL:?missing}"
-          : "${JF_PROVIDER_NAME:?missing}"
-          : "${IDTOKEN:?missing}"
+          JF="${{ vars.JF_URL }}"
+          JF="${JF%/}"
+          EX_URL="$JF/access/api/v1/oidc/token"
+          PAYLOAD=$(jq -nc \
+            --arg gt  "urn:ietf:params:oauth:grant-type:token-exchange" \
+            --arg stt "urn:ietf:params:oauth:token-type:id_token" \
+            --arg tok "$IDTOKEN" \
+            --arg pn  "${{ vars.JF_OIDC_PROVIDER }}" \
+            '{grant_type:$gt,subject_token_type:$stt,subject_token:$tok,provider_name:$pn}')
+          RESP=$(curl -sS -X POST -H "Content-Type: application/json" "$EX_URL" -d "$PAYLOAD")
+          printf '%s\n' "$RESP" | jq . > jfrog-exchange-response.json || true
+          if echo "$RESP" | jq -e .access_token >/dev/null 2>&1; then
+            echo "access_token=$(echo "$RESP" | jq -r .access_token)" >> "$GITHUB_OUTPUT"
+          else
+            echo "JFrog exchange failed. See jfrog-exchange-response.json"
+            exit 1
+          fi
 
-          EX_URL="${JF_URL%/}/access/api/v1/oidc/token"
-          PAYLOAD="$(jq -nc \
-             --arg gt  "urn:ietf:params:oauth:grant-type:token-exchange" \
-             --arg stt "urn:ietf:params:oauth:token-type:id_token" \
-             --arg tok "${IDTOKEN}
+      - name: Download JFrog CLI and ping
+        id: jf-cli
+        env:
+          AT: ${{ steps.jf-exchange.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          curl -fL https://releases.jfrog.io/artifactory/jfrog-cli/v2-jf/jfrog-cli-linux-amd64/jf -o jf
+          chmod +x jf
+          ./jf rt ping --url "${{ vars.JF_URL }}" --access-token "$AT" 2>&1 | tee jfrog-cli-ping.log
+          grep -i 'Trace ID' jfrog-cli-ping.log || true
+
+      - name: Upload OIDC/JFrog debug logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: jfrog-oidc-debug
+          path: |
+            gh-oidc-response.json
+            jfrog-exchange-response.json
+            jfrog-cli-ping.log
+            ~/.jfrog/logs/**/*.log
