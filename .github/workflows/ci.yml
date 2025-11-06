@@ -27,7 +27,7 @@ jobs:
       - name: Get OIDC token for JFrog
         id: oidc
         run: |
-          URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://solengeu.jfrog.io"
+          URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${{ vars.JF_URL }}"
           TOKEN_JSON=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$URL")
           TOKEN=$(echo "$TOKEN_JSON" | jq -r '.value')
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
