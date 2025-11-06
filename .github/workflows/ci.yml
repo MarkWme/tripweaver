@@ -20,6 +20,10 @@ env:
   # Enable command summaries for GitHub Actions integration
   # JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR: ${{ runner.temp }}/jfrog-command-summaries
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   debug-oidc:
     runs-on: ubuntu-latest
