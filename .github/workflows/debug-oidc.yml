@@ -67,17 +67,19 @@ jobs:
           fi
 
       # Only ping if exchange succeeded
-      - name: Download JFrog CLI and ping
-        id: jf-cli
-        if: steps.jf-exchange.outputs.ok == 'true'
+      - name: Setup JFrog CLI
+        if: steps.jf-exchange.outcome == 'success' || steps.jf-exchange.outputs.ok == 'true'
+        uses: jfrog/setup-jfrog-cli@v4
         env:
-          AT: ${{ steps.jf-exchange.outputs.access_token }}
+          JF_URL: ${{ vars.JF_URL }}
+        with:
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+          oidc-audience: ${{ vars.JF_URL }}
+
+      - name: Run JFrog CLI
+        if: steps.jf-exchange.outcome == 'success' || steps.jf-exchange.outputs.ok == 'true'
         run: |
-          set -euo pipefail
-          curl -fL https://releases.jfrog.io/artifactory/jfrog-cli/v2-jf/jfrog-cli-linux-amd64/jf -o jf
-          chmod +x jf
-          ./jf rt ping --url "${{ vars.JF_URL }}" --access-token "$AT" 2>&1 | tee debug/jfrog-cli-ping.log
-          grep -i 'Trace ID' debug/jfrog-cli-ping.log || true
+          jf rt ping
 
       # Always upload artifacts, even if exchange failed
       - name: Upload OIDC/JFrog debug logs
