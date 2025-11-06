@@ -1,5 +1,4 @@
 name: debug-oidc
-
 on:
   workflow_dispatch:
 
@@ -11,9 +10,9 @@ jobs:
   debug-oidc:
     runs-on: ubuntu-latest
     env:
-      # Define these in GitHub → Settings → Variables
-      # vars.JF_URL example: https://yourdomain.jfrog.io
-      # vars.JF_PROVIDER_NAME example: github-oidc
+      # GitHub → Settings → Variables
+      # JF_URL example: https://solengeu.jfrog.io
+      # JF_PROVIDER_NAME example: github-oidc
       JF_URL: ${{ vars.JF_URL }}
       JF_PROVIDER_NAME: ${{ vars.JF_OIDC_PROVIDER }}
 
@@ -40,7 +39,10 @@ jobs:
           python3 - << 'PY'
 import os, json, base64, sys
 tok = os.environ["TOKEN"].strip()
-h,p,s = tok.split(".")
+parts = tok.split(".")
+if len(parts) != 3:
+    print("Invalid JWT", file=sys.stderr); sys.exit(1)
+p = parts[1]
 p += "=" * ((4 - len(p) % 4) % 4)
 claims = json.loads(base64.urlsafe_b64decode(p).decode())
 print(json.dumps(claims, indent=2, sort_keys=True))
@@ -64,20 +66,18 @@ PY
              '{grant_type:$gt,subject_token_type:$stt,subject_token:$tok,provider_name:$pn}')"
 
           echo "POST ${EX_URL}"
-          RESP="$(curl -sS -i -X POST -H "Content-Type: application/json" "${EX_URL}" -d "${PAYLOAD}")"
-          printf "%s\n" "${RESP}" > jfrog-exchange-http.txt
-          echo "Raw HTTP response saved to jfrog-exchange-http.txt"
+          RESP="$(curl -sS -X POST -H "Content-Type: application/json" "${EX_URL}" -d "${PAYLOAD}")"
+          echo "${RESP}" | jq . >/tmp/jfrog-exchange.json || true
 
-          # Strip headers for JSON parse
-          BODY="$(printf "%s" "${RESP}" | awk 'BEGIN{p=0} /^[[:space:]]*$/{p=1; next} p{print}')"
-          if echo "${BODY}" | jq -e .access_token >/dev/null 2>&1; then
-            AT="$(echo "${BODY}" | jq -r .access_token)"
-            EXP="$(echo "${BODY}" | jq -r .expires_in)"
+          # Parse success or show structured error
+          if echo "${RESP}" | jq -e .access_token >/dev/null 2>&1; then
+            AT="$(echo "${RESP}" | jq -r .access_token)"
+            EXP="$(echo "${RESP}" | jq -r .expires_in)"
             echo "Received JFrog access token. Expires in ${EXP}s"
             echo "access_token=${AT}" >> "$GITHUB_OUTPUT"
           else
-            echo "Token exchange failed. Parsed body:"
-            echo "${BODY}" | jq . || true
+            echo "Token exchange failed. Response:"
+            echo "${RESP}" | jq . || echo "${RESP}"
             exit 1
           fi
         env:
@@ -88,9 +88,6 @@ PY
           set -euo pipefail
           curl -fL https://releases.jfrog.io/artifactory/jfrog-cli/v2-jf/jfrog-cli-linux-amd64/jf -o jf
           chmod +x jf
-          ./jf rt ping \
-            --url "${JF_URL%/}" \
-            --access-token "${AT}"
+          ./jf rt ping --url "${JF_URL%/}" --access-token "${AT}"
         env:
           AT: ${{ steps.jf-exchange.outputs.access_token }}
-          JF_URL: ${{ env.JF_URL }}
