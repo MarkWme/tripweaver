@@ -25,21 +25,6 @@ permissions:
   contents: read
 
 jobs:
-  debug-oidc:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get OIDC token for JFrog
-        id: oidc
-        run: |
-          URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${{ vars.JF_URL }}"
-          TOKEN_JSON=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$URL")
-          TOKEN=$(echo "$TOKEN_JSON" | jq -r '.value')
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      - name: Show claims
-        run: |
-          echo "${{ steps.oidc.outputs.token }}" \
-          | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -127,7 +112,7 @@ jobs:
           syft $IMG_API@${API_DIGEST}   -o cyclonedx-json > _sbom/api.cdx.json
           syft $IMG_FE@${FE_DIGEST}     -o cyclonedx-json > _sbom/frontend.cdx.json
           syft $IMG_SEED@${SEED_DIGEST} -o cyclonedx-json > _sbom/seed.cdx.json
-          jf rt u "_sbom/*.json" "tripweaver-sbom/sbom/tripweaver-ci/${{ github.run_id }}/"
+          jf rt u "_sbom/*.json" "mw-sbom/sbom/tripweaver-ci/${{ github.run_id }}/"
 
       # ---- Sign images (Cosign keyless). Optional: set COSIGN_EXPERIMENTAL=1 if needed ----
       - uses: sigstore/cosign-installer@v3.7.0
