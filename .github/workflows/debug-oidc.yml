@@ -1,6 +1,5 @@
 name: debug-oidc
-on:
-  workflow_dispatch:
+on: { workflow_dispatch: {} }
 
 permissions:
   id-token: write
@@ -10,9 +9,9 @@ jobs:
   debug-oidc:
     runs-on: ubuntu-latest
     env:
-      # GitHub → Settings → Variables
-      # JF_URL example: https://solengeu.jfrog.io
-      # JF_PROVIDER_NAME example: github-oidc
+      # Define in GitHub → Settings → Variables
+      # JF_URL e.g. https://solengeu.jfrog.io
+      # JF_PROVIDER_NAME e.g. github-oidc
       JF_URL: ${{ vars.JF_URL }}
       JF_PROVIDER_NAME: ${{ vars.JF_OIDC_PROVIDER }}
 
@@ -28,18 +27,19 @@ jobs:
           AUD="${JF_URL%/}"
           URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUD}"
 
-          echo "Requesting ID token for audience: ${AUD}"
           RESP="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${URL}")"
           echo "${RESP}" | jq -e .value >/dev/null
-          IDTOKEN="$(echo "${RESP}" | jq -r .value)"
-          echo "idtoken=${IDTOKEN}" >> "$GITHUB_OUTPUT"
+          echo "idtoken=$(echo "${RESP}" | jq -r .value)" >> "$GITHUB_OUTPUT"
 
-      - name: Show ID token claims
+      - name: Show ID token claims (bash+jq only)
         run: |
-        python3 -c 'import os,json,base64,sys;
-p=os.environ["TOKEN"].split(".")[1];
-p+="="*((4-len(p)%4)%4);
-print(json.dumps(json.loads(base64.urlsafe_b64decode(p)),indent=2,sort_keys=True))'
+          set -euo pipefail
+          TOK="${TOKEN:?missing}"
+          PAYLOAD="$(printf '%s' "$TOK" | cut -d. -f2 | tr '_-' '/+')"
+          # pad for base64
+          rem=$(( ${#PAYLOAD} % 4 ))
+          if [ "$rem" -eq 2 ]; then PAYLOAD="${PAYLOAD}=="; elif [ "$rem" -eq 3 ]; then PAYLOAD="${PAYLOAD}="; fi
+          printf '%s' "$PAYLOAD" | base64 -d | jq .
         env:
           TOKEN: ${{ steps.gh-oidc.outputs.idtoken }}
 
@@ -49,38 +49,10 @@ print(json.dumps(json.loads(base64.urlsafe_b64decode(p)),indent=2,sort_keys=True
           set -euo pipefail
           : "${JF_URL:?missing}"
           : "${JF_PROVIDER_NAME:?missing}"
+          : "${IDTOKEN:?missing}"
 
           EX_URL="${JF_URL%/}/access/api/v1/oidc/token"
           PAYLOAD="$(jq -nc \
              --arg gt  "urn:ietf:params:oauth:grant-type:token-exchange" \
              --arg stt "urn:ietf:params:oauth:token-type:id_token" \
-             --arg tok "${IDTOKEN}" \
-             --arg pn  "${JF_PROVIDER_NAME}" \
-             '{grant_type:$gt,subject_token_type:$stt,subject_token:$tok,provider_name:$pn}')"
-
-          echo "POST ${EX_URL}"
-          RESP="$(curl -sS -X POST -H "Content-Type: application/json" "${EX_URL}" -d "${PAYLOAD}")"
-          echo "${RESP}" | jq . >/tmp/jfrog-exchange.json || true
-
-          # Parse success or show structured error
-          if echo "${RESP}" | jq -e .access_token >/dev/null 2>&1; then
-            AT="$(echo "${RESP}" | jq -r .access_token)"
-            EXP="$(echo "${RESP}" | jq -r .expires_in)"
-            echo "Received JFrog access token. Expires in ${EXP}s"
-            echo "access_token=${AT}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Token exchange failed. Response:"
-            echo "${RESP}" | jq . || echo "${RESP}"
-            exit 1
-          fi
-        env:
-          IDTOKEN: ${{ steps.gh-oidc.outputs.idtoken }}
-
-      - name: Ping Artifactory using access token
-        run: |
-          set -euo pipefail
-          curl -fL https://releases.jfrog.io/artifactory/jfrog-cli/v2-jf/jfrog-cli-linux-amd64/jf -o jf
-          chmod +x jf
-          ./jf rt ping --url "${JF_URL%/}" --access-token "${AT}"
-        env:
-          AT: ${{ steps.jf-exchange.outputs.access_token }}
+             --arg tok "${IDTOKEN}
